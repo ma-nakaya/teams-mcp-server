@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "teams-mcp-server"
+version = "0.1.0"
+description = "Read-only MCP server for Microsoft Teams Web through an authenticated Playwright CLI session"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Masataka Nakaya" }]
+dependencies = [
+  "mcp>=1.12,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2,<9",
+  "ruff>=0.6,<1",
+]
+
+[project.scripts]
+teams-mcp = "teams_mcp.server:main"
+teams-recaps = "teams_mcp.cli:main"
+teams-authenticate = "teams_mcp.authenticate:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/teams_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

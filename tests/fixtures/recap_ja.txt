@@ -1,0 +1,11 @@
+- main [ref=e100]:
+  - heading "会議リキャップ" [level=1] [ref=e101]
+  - heading "AI によるメモ" [level=2] [ref=e102]
+  - list [ref=e103]:
+    - listitem [ref=e104]:
+      - paragraph: 新人研修環境は Codespaces を使用する
+      - paragraph: 8月のお盆前までに資料を更新する
+    - listitem [ref=e105]:
+      - paragraph: 担当者
+        - text: 中谷さんがレビュー観点を整理する
+  - button "閉じる" [ref=e200]
