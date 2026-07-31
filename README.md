@@ -92,3 +92,7 @@ ruff check .
 - チャット、チャネル投稿、横断検索は後続 Phase です。
 
 設計: [Teams Chat / Meeting Recap MCPサーバー設計（Playwright方式）](https://app.notion.com/p/3a5e3de47ee08181890bce6f64ba173c)
+
+## License
+
+MIT
