@@ -4,6 +4,9 @@
 
 Phase 1 では、指定日の会議チャットから AI リキャップを取得する `collect_meeting_recaps` のみを公開します。Teams の HTML、snapshot 全体、Cookie、認証情報は MCP レスポンスへ含めません。
 
+> [!IMPORTANT]
+> **公開状況:** Phase 1のプロトタイプです。単体テストは完了していますが、実際のTeams環境を使ったセレクタ調整とSecure MCP Tunnel経由の疎通確認は未完了です。利用可能な完成版としてXなどで紹介するのは、実機確認とPRのマージ後を想定しています。
+
 ## 前提
 
 - Windows 11
