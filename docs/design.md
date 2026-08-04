@@ -15,6 +15,7 @@ MCP client
     |
     v
 TeamsService ---- WriteGuard (default deny / exact allowlist / per-call confirm)
+    |          `-- ReadStateWriteGuard (separate gate / explicit boundary)
     |
     +---- Chat Service -------- DM / group / meeting / channel content / send
     |
@@ -50,9 +51,13 @@ Chat Serviceのconversation一覧を共通入口にし、`threadProperties`とco
 
 過去方向のページングには`_metadata.backwardLink`を使う。リンク先ホストと認証リージョンが一致しない場合は拒否する。`syncState`は新着同期用であり、過去ログ取得には使わない。
 
+自分の既読状態はChat Serviceの`threadProperties`から推測せず、CSA snapshotの`isRead`をconversation IDで結合して`read|unread|unknown`へ正規化する。対応するCSA recordがない場合やbooleanでない場合は`unknown`とし、未読へ寄せない。`unread_only`は明示的な`unread`だけを残す。
+
 ### チャネルスレッド
 
 CSA aggregateからチーム／チャネルのメタデータを取得する。本文はChat Serviceのchannel conversationを読み、`rootMessageId`で親投稿と返信を分ける。特定スレッドは`channelId;messageid=rootId` conversationとして取得し、`Thread { root, replies }`へ正規化する。
+
+channelの通常message既読はCSA `isMessageRead`、重要message既読は`isImportantMessageRead`を別fieldへ正規化する。これらをActivity feed、mention、通知badgeの統一未読状態とは扱わない。
 
 ### 会議ログ
 
@@ -77,6 +82,20 @@ AIリキャップ、AIノート、タスクはVTT文字起こしと同一では�
 
 初期版では送信と返信だけを許可し、編集・削除・リアクション・ファイル添付は実装しない。不可逆性やなりすまし範囲を広げないためである。
 
+### 既読位置の変更
+
+既読化はmessage送信とは異なるが、Teams全clientへ同期し、chatのread receiptに影響し得る外部状態変更である。このため、message送信を有効化しても既読化を自動的には許可しない。
+
+- `TEAMS_READ_STATE_WRITES_ENABLED=true`の専用gate
+- `TEAMS_READ_STATE_ALLOWLIST`の`chat:<id>`または`channel:<team-id>/<channel-id>`完全一致
+- 個別呼び出しの`confirm=true`
+- `through_message_id`または実行時の最新を意味する`through_latest=true`の排他的な指定
+- CSAのlatest messageと現在の`consumptionHorizon.originalArrivalTime`による境界検証
+- 現在位置以下はPUTしない。latestより先、非10進数、32桁超は拒否
+- read toolや要約toolからの暗黙呼び出しを禁止
+
+許可後はChat Serviceのconversation `consumptionhorizon` propertyへ`<lastReadMessageId>;<readTimeMs>;0`をPUTする。成功時はCSA cacheを破棄する。監査ログには本文を含めず、許可したtargetだけを記録する。
+
 ## 故障モード
 
 | 故障 | 挙動 |
@@ -88,6 +107,7 @@ AIリキャップ、AIノート、タスクはVTT文字起こしと同一では�
 | 巨大レスポンス | 設定済みバイト上限で拒否 |
 | keyring不在 | 平文保存せず認証失敗 |
 | 書き込み設定不足 | API呼び出し前に拒否 |
+| 既読境界が不明／後退 | PUTせず安定したエラーまたは`already_read`を返す |
 
 ## 今後の検証順
 
@@ -97,3 +117,4 @@ AIリキャップ、AIノート、タスクはVTT文字起こしと同一では�
 4. 実際に文字起こしが存在する会議でAMS VTT
 5. 専用テストチャット／チャネルだけをallowlistし、短いテスト投稿
 6. AIリキャップ画面を利用できる専用テスト会議で、秘密除去したネットワーク記録を比較し、Meeting Catchup／Meeting Artifacts／MCPSの契約を調査
+7. 専用chat／channelで既読化を実行し、CSA flag、他端末同期、read receiptへの影響を確認

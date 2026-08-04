@@ -19,6 +19,8 @@
 | chat send | `.../conversations/{id}/messages` POST | 同上 | 現行MIT forkで相互確認 |
 | CSA用Bearer | `login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | refresh token、scope=`https://chatsvcagg.teams.microsoft.com/.default` | 実アカウントで検証 |
 | team/channel snapshot | `teams.microsoft.com/api/csa/api/v1/teams/users/me` | chatsvcagg audienceのBearer | 実アカウントで検証 |
+| 自分のchat/channel既読状態 | CSA snapshotの`isRead` / `isMessageRead` / `isImportantMessageRead` | 同上 | 実アカウントで全recordのfieldを確認 |
+| 自分の既読位置更新 | `.../conversations/{id}/properties?name=consumptionhorizon` PUT | `Authentication: skypetoken=...` | 公開実装とwire-format unit testで相互確認。対象テナントへのPUTは未実施 |
 | channel messages | Chat Serviceの`conversations/{channelId}/messages` | `Authentication: skypetoken=...` | 実アカウントで検証 |
 | thread replies | Chat Serviceの`conversations/{channelId};messageid={rootId}/messages` | 同上 | 実アカウントで検証 |
 | transcript | 録画メッセージ内の`amsTranscript` URI | `Authorization: skype_token ...` | 実アカウントの非空VTTで検証 |
@@ -34,6 +36,10 @@ Teamsの2026-08-04時点の公開Web bundleにはCSAホスト、`/api/v1/`、`te
 - 直近の会議を走査し、AMSから非空のVTTを取得して話者付きエントリへ変換できた。
 - substrate audienceのアクセストークンは発行できたが、`WorkingSetFiles`は`403 ErrorAccessDenied`だった。そのため、現行実装ではAMS文字起こしの代替経路にしない。
 - 公開Web bundle上でMeeting Catchup、Meeting Artifacts、MCPS関連の設定値は観測したが、要求形式・権限・応答契約を安全に確定できなかった。AIリキャップ取得は未実装のまま明示する。
+- CSA snapshotではchat 879件すべてに`isRead`、channel 226件すべてに`isMessageRead`と`isImportantMessageRead`が存在した。検証時点でchat 19件、channel 82件が通常message未読だった。
+- Chat Service会話478件のうちCSAとID一致した346件では15件が未読、331件が既読だった。Chat Service側の`consumptionhorizon`から安定した`unreadCount`は得られなかったため、CSA booleanを正本とする。
+- CSA `consumptionHorizon`はchat 690件、channel 155件で`originalArrivalTime`、`timeStamp`、`clientMessageId`を持つことを、値を出さずshapeだけ確認した。既読更新では`originalArrivalTime`より前へ進めない。
+- member別`GET /v1/threads/{id}/consumptionhorizons`はsample targetで404だったため、他人のRead by／Seen by取得には使用しない。
 
 上記の件数は検証時点のアカウント状態であり、API仕様や製品上限ではない。
 
@@ -58,4 +64,5 @@ Microsoftの正式なTeams message取得経路はGraphのTeams Export APIであ�
 - 読み取りprobeは件数と表示名だけを出し、本文をコンソールへ表示しない。
 - 実メッセージ本文の検証はMCPレスポンスを必要最小限に制限する。
 - 書き込みは専用の宛先をallowlistし、ユーザーが文面と送信先を確認してから行う。
+- 既読化はmessage送信と別gateにし、専用target、既読境界、`confirm=true`をユーザーが確認してから行う。read-only probeや本文取得だけでは既読化しない。
 - DevToolsやHTTPログを保存する場合は、`Authorization`、`Authentication`、`X-Skypetoken`、Cookie、署名付きURLを除去する。
