@@ -38,6 +38,7 @@ Graph APIはスコープ要求にも通信先にも含めない。Playwright、S
 3. 実テナントを解決し、Teams authzサービスで短命なSkypeトークンを発行する。
 4. 更新トークンとSkypeトークンはOS資格情報ボルトに格納する。安全なkeyringがない環境では失敗させ、平文ファイルへフォールバックしない。
 5. MCPレスポンス、例外、監査ログへトークン、Cookie、署名付き文字起こしURLを出さない。
+6. `teams_auth_status`でも期限切れSkype tokenの自動更新を試み、LLMが更新可能な期限切れを再ログイン必須と誤判定しないよう`usable`と`reauthentication_required`を返す。
 
 公開クライアントIDの再利用と非公開APIはMicrosoftの正式な外部統合契約ではない。組織が承認した独自公開クライアントを用意できる場合は`TEAMS_CLIENT_ID`で差し替える。
 

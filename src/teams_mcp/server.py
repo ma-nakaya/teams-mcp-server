@@ -34,6 +34,8 @@ mcp = FastMCP(
     "Teams (local, no Graph)",
     instructions=(
         "Local Microsoft Teams access through unsupported Teams web APIs. "
+        "teams_auth_status refreshes an expired session when possible; only request a new sign-in "
+        "when it returns usable=false and reauthentication_required=true. "
         "Never request or expose auth tokens. Writes are disabled by default and require an "
         "allowlisted target plus confirm=true."
     ),
@@ -41,9 +43,9 @@ mcp = FastMCP(
 
 
 @mcp.tool(annotations=READ_ONLY)
-def teams_auth_status() -> dict[str, object]:
-    """認証状態だけを返します。トークンやCookieは返しません。"""
-    return service.auth_status()
+async def teams_auth_status() -> dict[str, object]:
+    """期限切れなら安全に自動更新し、利用可能な認証状態だけを返します。"""
+    return await service.auth_status()
 
 
 @mcp.tool(annotations=READ_ONLY)

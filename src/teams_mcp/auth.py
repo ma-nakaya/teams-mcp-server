@@ -492,6 +492,37 @@ class AuthManager:
             "token_expired": bundle.skype_expires_at <= time.time(),
         }
 
+    async def ensure_status(self) -> dict[str, object]:
+        """Return a usable auth status, refreshing an expired token when possible."""
+        before = self.status()
+        if not before.get("authenticated"):
+            return {
+                **before,
+                "usable": False,
+                "token_refreshed": False,
+                "reauthentication_required": True,
+            }
+
+        previous_expiry = before.get("token_expires_at")
+        try:
+            await self.get_bundle()
+        except AuthenticationError as exc:
+            return {
+                **self.status(),
+                "usable": False,
+                "token_refreshed": False,
+                "reauthentication_required": True,
+                "refresh_error_code": exc.code,
+            }
+
+        current = self.status()
+        return {
+            **current,
+            "usable": not bool(current.get("token_expired")),
+            "token_refreshed": current.get("token_expires_at") != previous_expiry,
+            "reauthentication_required": False,
+        }
+
     def logout(self) -> None:
         self.store.delete()
 

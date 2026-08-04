@@ -66,7 +66,7 @@ uv run teams-mcp login-complete
 
 | ツール | 用途 |
 |---|---|
-| `teams_auth_status` | 秘密を含まない認証状態 |
+| `teams_auth_status` | 秘密を含まない認証状態。期限切れtokenは更新可能なら自動更新 |
 | `list_recent_chats` | DM、グループ、会議チャット一覧 |
 | `read_chat` | DM／グループ本文 |
 | `list_teams` / `list_channels` | チーム／チャネル一覧 |
@@ -93,6 +93,8 @@ uv run teams-mcp-server
 ```
 
 対象ツールは`send_chat_message`、`send_channel_post`、`reply_channel_thread`です。監査ログには宛先、文字数、SHA-256だけを記録し、本文やトークンは記録しません。
+
+`teams_auth_status`は期限切れのSkype tokenを検出すると、Windows資格情報マネージャー内の更新トークンで自動復旧を試みます。`usable=false`かつ`reauthentication_required=true`の場合にだけ、`uv run teams-mcp login`による再認証が必要です。
 
 ## 開発
 

@@ -46,8 +46,8 @@ class TeamsService:
         self.settings = settings or auth.settings
         self.writes = WriteGuard(self.settings)
 
-    def auth_status(self) -> dict[str, object]:
-        return self.auth.status()
+    async def auth_status(self) -> dict[str, object]:
+        return await self.auth.ensure_status()
 
     async def list_recent_chats(
         self, *, kind: ChatFilter = "all", limit: int = 50

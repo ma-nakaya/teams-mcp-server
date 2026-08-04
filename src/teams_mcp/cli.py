@@ -44,7 +44,7 @@ async def _run(args: argparse.Namespace) -> int:
     pending_store = KeyringPendingLoginStore(settings.credential_profile)
     try:
         if args.command == "status":
-            _print_json(auth.status())
+            _print_json(await auth.ensure_status())
             return 0
         if args.command == "logout":
             auth.logout()

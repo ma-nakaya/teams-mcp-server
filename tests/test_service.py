@@ -11,8 +11,8 @@ from teams_mcp.service import TeamsService
 class FakeAuth:
     settings = Settings()
 
-    def status(self) -> dict[str, object]:
-        return {"authenticated": True}
+    async def ensure_status(self) -> dict[str, object]:
+        return {"authenticated": True, "usable": True}
 
 
 class FakeApi:
@@ -92,6 +92,11 @@ class FakeApi:
 
 def service() -> TeamsService:
     return TeamsService(FakeAuth(), FakeApi())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_auth_status_reports_usable_session() -> None:
+    assert await service().auth_status() == {"authenticated": True, "usable": True}
 
 
 @pytest.mark.asyncio
