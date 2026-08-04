@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "teams-playwright-mcp-server"
 version = "0.2.0"
-description = "A local Microsoft Teams MCP server using Teams web APIs without Microsoft Graph or Playwright"
+description = "Unofficial local Microsoft Teams MCP server using private Teams web APIs without Microsoft Graph or Playwright"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

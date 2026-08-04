@@ -1,9 +1,9 @@
-# Teams Playwright MCP Server
+# Teams MCP Server (Unofficial)
 
-Microsoft Graph APIとPlaywrightを使わず、ローカルのMicrosoft TeamsへアクセスするPython 3.11製MCPサーバーです。リポジトリ名には初期案の`playwright`が残っていますが、現行実装にPlaywright依存はありません。
+> [!CAUTION]
+> **Unofficial / 非公式** — 本プロジェクトはMicrosoftによる公式提供、承認、提携、サポートを受けたものではありません。Teams Webの非公開APIを利用する実験的実装であり、API変更やテナントポリシーによって予告なく動作しなくなる可能性があります。利用者自身が、所属組織の利用規約、情報管理ポリシー、条件付きアクセス、対象データへの権限を確認してください。
 
-> [!WARNING]
-> Teams Webの非公開APIを利用する実験的実装です。Microsoftが互換性を保証する方式ではなく、テナントの利用規約・情報管理ポリシー・条件付きアクセスを確認したうえで利用してください。API変更で予告なく動作しなくなる可能性があります。
+Microsoft Graph APIとPlaywrightを使わず、ローカルのMicrosoft TeamsへアクセスするPython 3.11製MCPサーバーです。Python配布名やローカル保存領域には初期案の`teams-playwright-mcp-server`が残っていますが、現行実装にPlaywright依存はありません。
 
 ## 現在の機能
 
@@ -47,7 +47,7 @@ uv run teams-mcp login-complete
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\path\\to\\teams-playwright-mcp-server",
+        "C:\\path\\to\\teams-mcp-server",
         "run",
         "teams-mcp-server"
       ]

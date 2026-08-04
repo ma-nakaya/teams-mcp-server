@@ -22,7 +22,7 @@ Teamsの更新トークンとSkypeトークンはWindows資格情報マネージ
 
 ```powershell
 $tunnelClient = "C:\Apps\TunnelClient\tunnel-client.exe"
-$projectDirectory = "C:\path\to\teams-playwright-mcp-server"
+$projectDirectory = "C:\path\to\teams-mcp-server"
 $uv = (Get-Command uv).Source.Replace("\", "/")
 $mcpCommand = "$uv --directory $($projectDirectory.Replace('\', '/')) run teams-mcp-server"
 
