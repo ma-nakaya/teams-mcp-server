@@ -81,4 +81,5 @@ New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 - `--allow-remote-ui`を指定せず、admin UIをloopbackから公開しない。
 - `--log.http-raw-unsafe`を使用しない。ログへMCP payloadや認証ヘッダーを保存しない。
 - 書き込みツールはTunnel接続後も、`TEAMS_WRITES_ENABLED`、宛先allowlist、`confirm=true`の三条件が必要である。
+- 既読化はmessage送信と分離し、`TEAMS_READ_STATE_WRITES_ENABLED`、専用allowlist、`confirm=true`、明示的なmessage境界が必要である。本文取得だけでは既読にしない。
 - Tunnel IDはprofileに必要だが、runtime APIキーやTeamsトークンをリポジトリへコミットしない。
