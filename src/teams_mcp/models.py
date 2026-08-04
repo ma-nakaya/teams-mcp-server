@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 ChatKind = Literal["direct", "group", "meeting", "self", "unknown"]
+ReadState = Literal["read", "unread", "unknown"]
+ReadStateSource = Literal["csa", "unavailable"]
 
 
 @dataclass(slots=True)
@@ -41,6 +43,8 @@ class Chat:
     member_count: int | None
     last_message_at: str | None
     last_message_preview: str | None
+    read_state: ReadState = "unknown"
+    read_state_source: ReadStateSource = "unavailable"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -80,6 +84,9 @@ class Channel:
     team_id: str
     name: str
     description: str | None = None
+    read_state: ReadState = "unknown"
+    important_message_read_state: ReadState = "unknown"
+    read_state_source: ReadStateSource = "unavailable"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -245,6 +245,28 @@ class TeamsApi:
             return []
         return [item for item in value["conversations"] if isinstance(item, dict)]
 
+    async def set_consumption_horizon(
+        self,
+        conversation_id: str,
+        last_read_message_id: str,
+        read_time_ms: int,
+    ) -> object:
+        bundle = await self.auth.get_bundle()
+        encoded = quote(conversation_id, safe="")
+        value = await self._json(
+            "PUT",
+            (
+                f"{self._chat_base(bundle)}/users/ME/conversations/{encoded}/properties"
+                "?name=consumptionhorizon"
+            ),
+            "chat",
+            json_body={
+                "consumptionhorizon": f"{last_read_message_id};{read_time_ms};0",
+            },
+        )
+        self._snapshot_cache = None
+        return value
+
     async def message_pages(
         self,
         conversation_id: str,

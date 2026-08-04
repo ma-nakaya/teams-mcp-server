@@ -17,6 +17,11 @@ class AuthorizedWrite:
     content_sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorizedReadStateWrite:
+    target: str
+
+
 class WriteGuard:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -53,3 +58,28 @@ class WriteGuard:
             "teams_write_authorized target=%s length=%d sha256=%s", target, len(marked), digest
         )
         return AuthorizedWrite(target=target, content=marked, content_sha256=digest)
+
+
+class ReadStateWriteGuard:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def authorize(self, *, target: str, confirm: bool) -> AuthorizedReadStateWrite:
+        if not self.settings.read_state_writes_enabled:
+            raise WriteRejectedError(
+                "Read-state writes are disabled. Set "
+                "TEAMS_READ_STATE_WRITES_ENABLED=true after reviewing the target.",
+                "read_state_writes_disabled",
+            )
+        if target not in self.settings.read_state_allowlist:
+            raise WriteRejectedError(
+                f"Read-state target is not allowlisted: {target}",
+                "read_state_target_not_allowlisted",
+            )
+        if not confirm:
+            raise WriteRejectedError(
+                "This read-state write requires confirm=true on the individual MCP call.",
+                "confirmation_required",
+            )
+        logger.info("teams_read_state_write_authorized target=%s", target)
+        return AuthorizedReadStateWrite(target=target)

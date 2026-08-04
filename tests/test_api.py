@@ -73,6 +73,29 @@ async def test_chat_request_uses_authentication_header() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sets_consumption_horizon_with_chat_auth_and_exact_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.headers["Authentication"] == "skypetoken=skype-secret"
+        assert request.url.params["name"] == "consumptionhorizon"
+        assert "/users/ME/conversations/19%3Achat%40thread.v2/properties" in str(request.url)
+        assert request.content == b'{"consumptionhorizon":"1700000000000;1700000000100;0"}'
+        return httpx.Response(200)
+
+    auth = FakeAuth()
+    async with client(handler) as http:
+        api = TeamsApi(auth, http=http)  # type: ignore[arg-type]
+        assert (
+            await api.set_consumption_horizon(
+                "19:chat@thread.v2",
+                "1700000000000",
+                1700000000100,
+            )
+            is None
+        )
+
+
+@pytest.mark.asyncio
 async def test_401_refreshes_once() -> None:
     attempts = 0
 

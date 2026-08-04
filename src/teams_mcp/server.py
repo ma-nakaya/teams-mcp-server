@@ -37,7 +37,8 @@ mcp = FastMCP(
         "teams_auth_status refreshes an expired session when possible; only request a new sign-in "
         "when it returns usable=false and reauthentication_required=true. "
         "Never request or expose auth tokens. Writes are disabled by default and require an "
-        "allowlisted target plus confirm=true."
+        "allowlisted target plus confirm=true. Reading content never marks it read. Read-state "
+        "changes use a separate disabled-by-default gate and an explicit message boundary."
     ),
 )
 
@@ -52,9 +53,14 @@ async def teams_auth_status() -> dict[str, object]:
 async def list_recent_chats(
     kind: Literal["all", "direct", "group", "meeting", "self"] = "all",
     limit: int = 50,
+    unread_only: bool = False,
 ) -> dict[str, object]:
-    """最近のDM、グループチャット、会議チャットを一覧化します。"""
-    return await service.list_recent_chats(kind=kind, limit=limit)
+    """既読状態つきでDM、グループ、会議チャットを一覧化します。"""
+    return await service.list_recent_chats(
+        kind=kind,
+        limit=limit,
+        unread_only=unread_only,
+    )
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -74,9 +80,9 @@ async def list_teams() -> dict[str, object]:
 
 
 @mcp.tool(annotations=READ_ONLY)
-async def list_channels(team_id: str) -> dict[str, object]:
-    """指定したチームのチャネルを一覧化します。"""
-    return await service.list_channels(team_id)
+async def list_channels(team_id: str, unread_only: bool = False) -> dict[str, object]:
+    """既読状態つきで指定チームのチャネルを一覧化します。"""
+    return await service.list_channels(team_id, unread_only=unread_only)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -112,9 +118,12 @@ async def read_channel_thread(
 
 
 @mcp.tool(annotations=READ_ONLY)
-async def list_meeting_chats(limit: int = 50) -> dict[str, object]:
-    """会議チャットを一覧化します。"""
-    return await service.list_meeting_chats(limit=limit)
+async def list_meeting_chats(
+    limit: int = 50,
+    unread_only: bool = False,
+) -> dict[str, object]:
+    """既読状態つきで会議チャットを一覧化します。"""
+    return await service.list_meeting_chats(limit=limit, unread_only=unread_only)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -162,6 +171,40 @@ async def collect_meeting_artifacts(
     return await service.collect_meeting_recaps(
         limit_chats=limit_chats,
         max_entries_per_meeting=max_entries_per_meeting,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def mark_chat_read(
+    chat_id: str,
+    through_message_id: str | None = None,
+    through_latest: bool = False,
+    confirm: bool = False,
+) -> dict[str, object]:
+    """許可済みチャットを指定メッセージまで既読にします。自動既読は行いません。"""
+    return await service.mark_chat_read(
+        chat_id,
+        through_message_id=through_message_id,
+        through_latest=through_latest,
+        confirm=confirm,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def mark_channel_read(
+    team_id: str,
+    channel_id: str,
+    through_message_id: str | None = None,
+    through_latest: bool = False,
+    confirm: bool = False,
+) -> dict[str, object]:
+    """許可済みチャネルを指定メッセージまで既読にします。自動既読は行いません。"""
+    return await service.mark_channel_read(
+        team_id,
+        channel_id,
+        through_message_id=through_message_id,
+        through_latest=through_latest,
+        confirm=confirm,
     )
 
 

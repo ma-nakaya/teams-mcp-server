@@ -20,6 +20,8 @@ async def test_expected_mcp_tools_are_registered() -> None:
         "read_meeting_chat",
         "read_meeting_transcript",
         "collect_meeting_recaps",
+        "mark_chat_read",
+        "mark_channel_read",
         "send_chat_message",
         "send_channel_post",
         "reply_channel_thread",
@@ -29,3 +31,6 @@ async def test_expected_mcp_tools_are_registered() -> None:
     assert by_name["read_chat"].annotations.readOnlyHint is True
     assert by_name["send_chat_message"].annotations is not None
     assert by_name["send_chat_message"].annotations.destructiveHint is True
+    assert by_name["mark_chat_read"].annotations is not None
+    assert by_name["mark_chat_read"].annotations.readOnlyHint is False
+    assert by_name["mark_chat_read"].annotations.destructiveHint is True

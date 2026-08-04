@@ -124,6 +124,7 @@ async def _run(args: argparse.Namespace) -> int:
                     "recent_chat_count": chats["count"],
                     "team_count": teams["count"],
                     "writes_enabled": settings.writes_enabled,
+                    "read_state_writes_enabled": settings.read_state_writes_enabled,
                 }
             )
             return 0

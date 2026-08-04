@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any, Literal
 
 from .api import TeamsApi
 from .auth import AuthManager
 from .config import Settings
 from .errors import TeamsMcpError
-from .models import Channel, Message, Team, Thread
+from .models import Channel, Message, ReadState, Team, Thread
 from .parsers import parse_chat, parse_message, parse_vtt, recording_artifact
-from .write_guard import WriteGuard
+from .write_guard import ReadStateWriteGuard, WriteGuard
 
 ChatFilter = Literal["all", "direct", "group", "meeting", "self"]
 
@@ -34,6 +35,30 @@ def _raw_string(record: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
+def _record(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _read_state(value: object) -> ReadState:
+    if value is True:
+        return "read"
+    if value is False:
+        return "unread"
+    return "unknown"
+
+
+def _message_id(value: object) -> str | None:
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized or not normalized.isdecimal() or len(normalized) > 32:
+        return None
+    return normalized
+
+
+def _horizon_message_id(raw: dict[str, Any]) -> str | None:
+    horizon = _record(raw.get("consumptionHorizon") or raw.get("userConsumptionHorizon"))
+    return _message_id(horizon.get("originalArrivalTime"))
+
+
 class TeamsService:
     def __init__(
         self,
@@ -45,22 +70,50 @@ class TeamsService:
         self.api = api
         self.settings = settings or auth.settings
         self.writes = WriteGuard(self.settings)
+        self.read_state_writes = ReadStateWriteGuard(self.settings)
 
     async def auth_status(self) -> dict[str, object]:
         return await self.auth.ensure_status()
 
     async def list_recent_chats(
-        self, *, kind: ChatFilter = "all", limit: int = 50
+        self,
+        *,
+        kind: ChatFilter = "all",
+        limit: int = 50,
+        unread_only: bool = False,
     ) -> dict[str, object]:
         if kind not in {"all", "direct", "group", "meeting", "self"}:
             raise ValueError("kind must be all, direct, group, meeting, or self")
         limit = min(max(limit, 1), 200)
-        chats = [chat for raw in await self.api.list_conversations() if (chat := parse_chat(raw))]
+        conversations, snapshot = await asyncio.gather(
+            self.api.list_conversations(),
+            self.api.teams_snapshot(),
+        )
+        csa_chats = {
+            chat_id: raw for raw in _rows(snapshot, "chats") if (chat_id := _raw_string(raw, "id"))
+        }
+        chats = []
+        for raw in conversations:
+            chat = parse_chat(raw)
+            if chat is None:
+                continue
+            csa = csa_chats.get(chat.id)
+            if csa is not None:
+                chat.read_state = _read_state(csa.get("isRead"))
+                if chat.read_state != "unknown":
+                    chat.read_state_source = "csa"
+            chats.append(chat)
         if kind != "all":
             chats = [chat for chat in chats if chat.kind == kind]
+        if unread_only:
+            chats = [chat for chat in chats if chat.read_state == "unread"]
         chats.sort(key=lambda item: item.last_message_at or "", reverse=True)
         selected = chats[:limit]
-        return {"count": len(selected), "chats": [chat.to_dict() for chat in selected]}
+        return {
+            "count": len(selected),
+            "unread_only": unread_only,
+            "chats": [chat.to_dict() for chat in selected],
+        }
 
     async def read_chat(
         self,
@@ -115,7 +168,7 @@ class TeamsService:
         teams.sort(key=lambda team: team.name.casefold())
         return {"count": len(teams), "teams": [team.to_dict() for team in teams]}
 
-    async def list_channels(self, team_id: str) -> dict[str, object]:
+    async def list_channels(self, team_id: str, *, unread_only: bool = False) -> dict[str, object]:
         snapshot = await self.api.teams_snapshot()
         selected = next(
             (
@@ -126,7 +179,12 @@ class TeamsService:
             None,
         )
         if selected is None:
-            return {"team_id": team_id, "count": 0, "channels": []}
+            return {
+                "team_id": team_id,
+                "count": 0,
+                "unread_only": unread_only,
+                "channels": [],
+            }
         channels: list[Channel] = []
         for item in _rows(selected, "channels"):
             if item.get("isDeleted") is True:
@@ -134,17 +192,27 @@ class TeamsService:
             channel_id = _raw_string(item, "id", "channelId", "threadId")
             if not channel_id:
                 continue
-            channels.append(
-                Channel(
-                    id=channel_id,
-                    team_id=team_id,
-                    name=_raw_string(item, "name", "displayName", "topic") or "Unknown channel",
-                    description=_raw_string(item, "description"),
-                )
+            read_state = _read_state(item.get("isMessageRead"))
+            important_state = _read_state(item.get("isImportantMessageRead"))
+            channel = Channel(
+                id=channel_id,
+                team_id=team_id,
+                name=_raw_string(item, "name", "displayName", "topic") or "Unknown channel",
+                description=_raw_string(item, "description"),
+                read_state=read_state,
+                important_message_read_state=important_state,
+                read_state_source=(
+                    "csa"
+                    if read_state != "unknown" or important_state != "unknown"
+                    else "unavailable"
+                ),
             )
+            if not unread_only or channel.read_state == "unread":
+                channels.append(channel)
         return {
             "team_id": team_id,
             "count": len(channels),
+            "unread_only": unread_only,
             "channels": [c.to_dict() for c in channels],
         }
 
@@ -215,8 +283,142 @@ class TeamsService:
             "threads": [thread.to_dict() for thread in threads],
         }
 
-    async def list_meeting_chats(self, *, limit: int = 50) -> dict[str, object]:
-        return await self.list_recent_chats(kind="meeting", limit=limit)
+    async def list_meeting_chats(
+        self, *, limit: int = 50, unread_only: bool = False
+    ) -> dict[str, object]:
+        return await self.list_recent_chats(
+            kind="meeting",
+            limit=limit,
+            unread_only=unread_only,
+        )
+
+    @staticmethod
+    def _read_boundary(
+        raw: dict[str, Any],
+        *,
+        through_message_id: str | None,
+        through_latest: bool,
+    ) -> tuple[str, str | None]:
+        explicit = _message_id(through_message_id)
+        if through_message_id is not None and explicit is None:
+            raise TeamsMcpError(
+                "through_message_id must be a decimal Teams message ID of at most 32 digits.",
+                "read_boundary_invalid",
+            )
+        if (explicit is None) == (not through_latest):
+            raise TeamsMcpError(
+                "Specify exactly one of through_message_id or through_latest=true.",
+                "read_boundary_required",
+            )
+        latest = _message_id(_record(raw.get("lastMessage")).get("id"))
+        if latest is None:
+            raise TeamsMcpError(
+                "Teams did not provide a usable latest-message boundary for this target.",
+                "latest_message_unavailable",
+            )
+        boundary = latest if through_latest else explicit
+        if boundary is None:
+            raise TeamsMcpError("The read boundary is missing.", "read_boundary_required")
+        if int(boundary) > int(latest):
+            raise TeamsMcpError(
+                "through_message_id is newer than the target's latest message.",
+                "read_boundary_after_latest",
+            )
+        return boundary, _horizon_message_id(raw)
+
+    async def mark_chat_read(
+        self,
+        chat_id: str,
+        *,
+        through_message_id: str | None = None,
+        through_latest: bool = False,
+        confirm: bool,
+    ) -> dict[str, object]:
+        target = f"chat:{chat_id}"
+        self.read_state_writes.authorize(target=target, confirm=confirm)
+        snapshot = await self.api.teams_snapshot(force=True)
+        raw = next(
+            (item for item in _rows(snapshot, "chats") if _raw_string(item, "id") == chat_id),
+            None,
+        )
+        if raw is None:
+            raise TeamsMcpError("The chat was not found in the Teams snapshot.", "chat_not_found")
+        boundary, current = self._read_boundary(
+            raw,
+            through_message_id=through_message_id,
+            through_latest=through_latest,
+        )
+        if current is not None and int(boundary) <= int(current):
+            return {
+                "status": "already_read",
+                "target": target,
+                "through_message_id": boundary,
+                "write_performed": False,
+            }
+        read_time_ms = int(time.time() * 1000)
+        await self.api.set_consumption_horizon(chat_id, boundary, read_time_ms)
+        return {
+            "status": "marked_read",
+            "target": target,
+            "through_message_id": boundary,
+            "read_time_ms": read_time_ms,
+            "write_performed": True,
+        }
+
+    async def mark_channel_read(
+        self,
+        team_id: str,
+        channel_id: str,
+        *,
+        through_message_id: str | None = None,
+        through_latest: bool = False,
+        confirm: bool,
+    ) -> dict[str, object]:
+        target = f"channel:{team_id}/{channel_id}"
+        self.read_state_writes.authorize(target=target, confirm=confirm)
+        snapshot = await self.api.teams_snapshot(force=True)
+        team = next(
+            (
+                item
+                for item in _rows(snapshot, "teams")
+                if _raw_string(item, "id", "teamId") == team_id
+            ),
+            None,
+        )
+        raw = next(
+            (
+                item
+                for item in _rows(team or {}, "channels")
+                if _raw_string(item, "id", "channelId", "threadId") == channel_id
+            ),
+            None,
+        )
+        if raw is None:
+            raise TeamsMcpError(
+                "The channel was not found in the Teams snapshot.",
+                "channel_not_found",
+            )
+        boundary, current = self._read_boundary(
+            raw,
+            through_message_id=through_message_id,
+            through_latest=through_latest,
+        )
+        if current is not None and int(boundary) <= int(current):
+            return {
+                "status": "already_read",
+                "target": target,
+                "through_message_id": boundary,
+                "write_performed": False,
+            }
+        read_time_ms = int(time.time() * 1000)
+        await self.api.set_consumption_horizon(channel_id, boundary, read_time_ms)
+        return {
+            "status": "marked_read",
+            "target": target,
+            "through_message_id": boundary,
+            "read_time_ms": read_time_ms,
+            "write_performed": True,
+        }
 
     async def read_meeting_chat(
         self, chat_id: str, *, limit: int = 200, before_ms: int | None = None

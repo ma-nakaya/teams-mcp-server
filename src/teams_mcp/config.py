@@ -49,6 +49,12 @@ class Settings:
     write_allowlist: frozenset[str] = field(
         default_factory=lambda: _csv_env("TEAMS_WRITE_ALLOWLIST")
     )
+    read_state_writes_enabled: bool = field(
+        default_factory=lambda: _bool_env("TEAMS_READ_STATE_WRITES_ENABLED", False)
+    )
+    read_state_allowlist: frozenset[str] = field(
+        default_factory=lambda: _csv_env("TEAMS_READ_STATE_ALLOWLIST")
+    )
     agent_marker: str = field(
         default_factory=lambda: os.getenv("TEAMS_AGENT_MARKER", "[MCP]").strip()
     )
