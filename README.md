@@ -56,6 +56,12 @@ uv run teams-mcp login-complete
 }
 ```
 
+## OpenAI Secure MCP Tunnel（任意）
+
+ローカルstdioサーバーをOpenAIのMCP Tunnelへ接続する場合も、Teams認証情報をcontrol planeへ登録する必要はありません。Tunnel Clientはローカルで`teams-mcp-server`を起動し、`CONTROL_PLANE_API_KEY`はprofileへ値を書かず環境変数参照にします。
+
+本番運用では、health UIをloopbackだけにbindし、Windows Scheduled TaskとSupervisorで常駐監視します。セットアップ、health確認、セキュリティ境界は[docs/tunnel.md](docs/tunnel.md)を参照してください。
+
 ### 読み取りツール
 
 | ツール | 用途 |
