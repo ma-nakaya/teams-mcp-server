@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "teams-mcp",
+  "version": "0.3.0",
+  "description": "Read Teams chats, channels, meetings, and transcripts and perform explicitly authorized state changes or sends with a portable MCP usage skill.",
+  "author": {
+    "name": "ma-nakaya",
+    "url": "https://github.com/ma-nakaya"
+  },
+  "homepage": "https://github.com/ma-nakaya/teams-mcp-server#readme",
+  "repository": "https://github.com/ma-nakaya/teams-mcp-server",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "microsoft-teams",
+    "agent-skills"
+  ]
+}
