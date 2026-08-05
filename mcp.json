@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "teams": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--locked",
+        "--no-dev",
+        "--project",
+        "${PLUGIN_ROOT}",
+        "teams-mcp-server"
+      ],
+      "env": {
+        "UV_CACHE_DIR": "${PLUGIN_DATA}/uv-cache",
+        "UV_PROJECT_ENVIRONMENT": "${PLUGIN_DATA}/venv"
+      },
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}
