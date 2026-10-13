@@ -14,6 +14,7 @@ Microsoft Graph APIとPlaywrightを使わず、ローカルのMicrosoft Teamsへ
 - チャット／チャネルの自分の既読状態取得と未読フィルタ
 - 会議録画メッセージからAMS VTT文字起こしを取得
 - DM送信、チャネル投稿、チャネルスレッド返信
+- 自分宛てチャットへのローカルPDF添付送信（実験的実装、互換性は環境に依存）
 - 明示したメッセージ境界までのチャット／チャネル既読化
 - プロセス間ファイルロックによるトークン更新の排他制御
 - ホスト許可リスト、応答サイズ制限、書き込み三重ガード
@@ -88,7 +89,23 @@ $env:TEAMS_AGENT_MARKER = "[MCP]"
 uv run teams-mcp-server
 ```
 
-対象ツールは`send_chat_message`、`send_channel_post`、`reply_channel_thread`です。監査ログには宛先、文字数、SHA-256だけを記録し、本文やトークンは記録しません。
+対象ツールは`send_chat_message`、`send_channel_post`、`reply_channel_thread`、`send_chat_file`です。テキスト送信の監査ログには宛先、文字数、SHA-256だけを記録し、本文やトークンは記録しません。`TEAMS_AGENT_MARKER`の既定値は`[MCP]`で、添付の説明にも設定済みのマーカーを適用します。
+
+### 自分宛てPDF添付（実験的）
+
+`send_chat_file(chat_id, file_path, request_id, confirm=false)`は、認証中の本人の自分宛てチャット`48:notes`だけを対象にします。既存の書き込み条件に加え、`TEAMS_WRITE_ALLOWLIST`への完全一致の宛先`chat:48:notes`の登録が必要です。ファイルと送信先への明示的な送信依頼を確認し、`teams_auth_status`と現在のselfチャットを確認してから呼び出してください。
+
+`file_path`はMCPサーバーが動く端末上の通常ファイルであるPDFの絶対パスです。ネットワークパス、シンボリックリンク、reparse pointは拒否します。容量は0バイトより大きく、10 MiBと`TEAMS_MAX_RESPONSE_BYTES`の小さい方以下、ファイル名は240文字以下かつUTF-8で255バイト以下です。制御文字や不正なUnicodeを含む名前は拒否します。
+
+1回の送信にUUIDの`request_id`を1つ割り当て、`confirm=true`で呼び出します。タイムアウトや結果不明時も同じUUIDを使ってください。既存の処理記録がある場合は送達確認だけを行い、自動再送はしません。確認範囲内にメッセージが見つからなくても未送信とは判断できないため、新しいUUIDで再送しないでください。
+
+成功と報告できるのは`status=sent_and_verified`かつ`attachment_verified=true`の場合だけです。メッセージ内の識別子とファイル名、添付を再取得した内容と元のPDFの一致を確認します。エラーは`isError=true`と構造化された`error_code`、`message`を返します。`send_outcome_unknown`や`file_operation_ambiguous`は結果不明、`file_acl_unverified`や`file_verification_failed`は検証失敗として停止します。詳細は[ツール契約](skills/use-teams-mcp/references/tool-contract.md#experimental-self-chat-pdf-attachments)を参照してください。読み取り、添付送信、送達確認では既読状態を変更しません。
+
+AMSへの作成要求は、認証中の本人だけに読み取り権限を指定します。その要求に対するHTTP 201を権限指定が受理された根拠とし、テナント、本人の識別子、ファイル名とメモリ内で結び付けます。再開時は`creation_policy=self_read_v1`、一致するfingerprint、`version=1`、既知のphaseを持つ検証済み処理記録からだけ復元します。AMSのGET応答から実際のACLは再取得できないため、サーバー側ACLを独立に検証したことにはなりません。アップロード前と投稿前にオブジェクトのメタデータを確認し、応答に含まれる権限などに矛盾があれば停止します。
+
+既存のSkype認証セッションと非公開のlegacy AMS APIを使い、新しいOAuth scopeやブラウザーCookieを取得せず、公開・組織全体への共有リンクも作りません。AMSはサポート対象外の内部APIで、添付の受理・表示はTeams環境に依存します。単一環境での動作確認は、すべてのテナントでの互換性を保証しません。機密ファイルを扱う前に、明示的に許可された非機密PDFで本人宛ての動作を確認してください。新たなIC3やGraphの権限が必要な場合は停止して報告し、自動取得しません。
+
+処理記録にはハッシュ、送達識別子、作成ポリシーと処理段階を保存し、ファイル名、ローカルパス、PDF本文、トークンは保存しません。添付確認の監査ログはself宛先、バイト数、ハッシュのみです。投稿前の失敗で、本人限定の権限を要求した空または未投稿のAMSオブジェクトが残る場合がありますが、自動削除は行いません。
 
 ### 既読状態
 

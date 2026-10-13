@@ -9,6 +9,7 @@ from .api import TeamsApi
 from .auth import AuthManager
 from .config import Settings
 from .errors import TeamsMcpError
+from .files import SelfFileSender
 from .models import Channel, Message, ReadState, Team, Thread
 from .parsers import parse_chat, parse_message, parse_vtt, recording_artifact
 from .write_guard import ReadStateWriteGuard, WriteGuard
@@ -528,6 +529,13 @@ class TeamsService:
             "content_sha256": authorized.content_sha256,
             "response": response,
         }
+
+    async def send_chat_file(
+        self, chat_id: str, file_path: str, request_id: str, *, confirm: bool
+    ) -> dict[str, object]:
+        return await SelfFileSender(self.api, self.settings).send(
+            chat_id, file_path, request_id, confirm=confirm
+        )
 
     async def send_channel_post(
         self, team_id: str, channel_id: str, content: str, *, confirm: bool
