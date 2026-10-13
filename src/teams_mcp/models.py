@@ -64,6 +64,7 @@ class Message:
     parent_message_id: str | None = None
     subject: str | None = None
     is_deleted: bool = False
+    attachments: list[dict[str, str | None]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

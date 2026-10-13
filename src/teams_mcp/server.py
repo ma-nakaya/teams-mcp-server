@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Literal
+from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
-from mcp.types import ToolAnnotations
+from mcp.types import CallToolResult, ToolAnnotations
 
 from .api import TeamsApi
 from .auth import AuthManager
 from .config import Settings
+from .files import file_tool_result
 from .service import TeamsService
 
 settings = Settings()
@@ -205,6 +206,23 @@ async def mark_channel_read(
         through_message_id=through_message_id,
         through_latest=through_latest,
         confirm=confirm,
+    )
+
+
+@mcp.tool(annotations=WRITE)
+async def send_chat_file(
+    chat_id: str,
+    file_path: str,
+    request_id: str,
+    confirm: bool = False,
+) -> Annotated[CallToolResult, dict[str, object]]:
+    """Send a local PDF to the authenticated self chat only; requires confirm=true.
+
+    Use a UUID request_id for this one operation and reuse it after uncertainty.
+    Never retry an uncertain send with a new ID. No read state is changed.
+    """
+    return await file_tool_result(
+        service.send_chat_file(chat_id, file_path, request_id, confirm=confirm)
     )
 
 
