@@ -8,7 +8,8 @@ import sys
 from typing import Any
 
 from .api import TeamsApi
-from .auth import AuthManager, DeviceCodePrompt, PendingDeviceLogin
+from .auth import AuthManager
+from .auth_types import DeviceCodePrompt, PendingDeviceLogin
 from .config import Settings
 from .credentials import KeyringPendingLoginStore
 from .errors import TeamsMcpError

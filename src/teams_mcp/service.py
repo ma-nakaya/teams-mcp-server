@@ -12,6 +12,7 @@ from .errors import TeamsMcpError
 from .files import SelfFileSender
 from .models import Channel, Message, ReadState, Team, Thread
 from .parsers import parse_chat, parse_message, parse_vtt, recording_artifact
+from .read_boundary import resolve_read_boundary
 from .write_guard import ReadStateWriteGuard, WriteGuard
 
 ChatFilter = Literal["all", "direct", "group", "meeting", "self"]
@@ -46,18 +47,6 @@ def _read_state(value: object) -> ReadState:
     if value is False:
         return "unread"
     return "unknown"
-
-
-def _message_id(value: object) -> str | None:
-    normalized = str(value).strip() if value is not None else ""
-    if not normalized or not normalized.isdecimal() or len(normalized) > 32:
-        return None
-    return normalized
-
-
-def _horizon_message_id(raw: dict[str, Any]) -> str | None:
-    horizon = _record(raw.get("consumptionHorizon") or raw.get("userConsumptionHorizon"))
-    return _message_id(horizon.get("originalArrivalTime"))
 
 
 class TeamsService:
@@ -293,40 +282,6 @@ class TeamsService:
             unread_only=unread_only,
         )
 
-    @staticmethod
-    def _read_boundary(
-        raw: dict[str, Any],
-        *,
-        through_message_id: str | None,
-        through_latest: bool,
-    ) -> tuple[str, str | None]:
-        explicit = _message_id(through_message_id)
-        if through_message_id is not None and explicit is None:
-            raise TeamsMcpError(
-                "through_message_id must be a decimal Teams message ID of at most 32 digits.",
-                "read_boundary_invalid",
-            )
-        if (explicit is None) == (not through_latest):
-            raise TeamsMcpError(
-                "Specify exactly one of through_message_id or through_latest=true.",
-                "read_boundary_required",
-            )
-        latest = _message_id(_record(raw.get("lastMessage")).get("id"))
-        if latest is None:
-            raise TeamsMcpError(
-                "Teams did not provide a usable latest-message boundary for this target.",
-                "latest_message_unavailable",
-            )
-        boundary = latest if through_latest else explicit
-        if boundary is None:
-            raise TeamsMcpError("The read boundary is missing.", "read_boundary_required")
-        if int(boundary) > int(latest):
-            raise TeamsMcpError(
-                "through_message_id is newer than the target's latest message.",
-                "read_boundary_after_latest",
-            )
-        return boundary, _horizon_message_id(raw)
-
     async def mark_chat_read(
         self,
         chat_id: str,
@@ -344,7 +299,7 @@ class TeamsService:
         )
         if raw is None:
             raise TeamsMcpError("The chat was not found in the Teams snapshot.", "chat_not_found")
-        boundary, current = self._read_boundary(
+        boundary, current = resolve_read_boundary(
             raw,
             through_message_id=through_message_id,
             through_latest=through_latest,
@@ -399,7 +354,7 @@ class TeamsService:
                 "The channel was not found in the Teams snapshot.",
                 "channel_not_found",
             )
-        boundary, current = self._read_boundary(
+        boundary, current = resolve_read_boundary(
             raw,
             through_message_id=through_message_id,
             through_latest=through_latest,
