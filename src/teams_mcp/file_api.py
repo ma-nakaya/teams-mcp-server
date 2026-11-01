@@ -19,7 +19,7 @@ from uuid import UUID
 import httpx
 
 from .api import TeamsApi
-from .auth import _jwt_claims
+from .auth_types import _jwt_claims
 from .errors import ApiError
 from .models import CredentialBundle
 
