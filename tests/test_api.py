@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 
@@ -57,6 +58,30 @@ def test_rejects_token_delivery_to_unknown_hosts() -> None:
         TeamsApi._validate_url("https://evil.example/transcript", "transcript", bundle)
     with pytest.raises(ApiError, match="Substrate token to an unknown host"):
         TeamsApi._validate_url("https://evil.example/WorkingSetFiles", "substrate", bundle)
+
+
+@pytest.mark.asyncio
+async def test_search_posts_teams_query_to_substrate_with_bearer() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url == "https://substrate.office.com/search/api/v2/query"
+        assert request.headers["Authorization"] == "Bearer substrate-secret"
+        assert "Authentication" not in request.headers
+        body = json.loads(request.content)
+        assert body["Scenario"] == {"Name": "teams"}
+        (entity,) = body["EntityRequests"]
+        assert entity == {
+            "EntityType": "Message",
+            "ContentSources": ["Teams"],
+            "Query": {"QueryString": "plan"},
+            "Size": 10,
+            "From": 20,
+        }
+        return httpx.Response(200, json={"EntitySets": []})
+
+    async with client(handler) as http:
+        api = TeamsApi(FakeAuth(), http=http)  # type: ignore[arg-type]
+        assert await api.search_messages("plan", size=10, offset=20) == {"EntitySets": []}
 
 
 @pytest.mark.asyncio

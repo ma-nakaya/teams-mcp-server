@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from html import escape
 from typing import Any, Literal
 from urllib.parse import quote, urljoin, urlsplit
+from uuid import uuid4
 
 import httpx
 
@@ -325,6 +326,28 @@ class TeamsApi:
             raise ApiError("Teams CSA returned an invalid snapshot.", "snapshot_invalid")
         self._snapshot_cache = (time.monotonic() + 60, value)
         return value
+
+    async def search_messages(self, query: str, *, size: int, offset: int) -> object:
+        """Search the signed-in user's Teams messages through substrate search."""
+        return await self._json(
+            "POST",
+            "https://substrate.office.com/search/api/v2/query",
+            "substrate",
+            json_body={
+                "EntityRequests": [
+                    {
+                        "EntityType": "Message",
+                        "ContentSources": ["Teams"],
+                        "Query": {"QueryString": query},
+                        "Size": size,
+                        "From": offset,
+                    }
+                ],
+                "Cvid": str(uuid4()),
+                "LogicalId": str(uuid4()),
+                "Scenario": {"Name": "teams"},
+            },
+        )
 
     async def channel_messages(self, team_id: str, channel_id: str, *, limit: int = 50) -> object:
         del team_id

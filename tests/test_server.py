@@ -12,6 +12,7 @@ async def test_expected_mcp_tools_are_registered() -> None:
     assert {
         "list_recent_chats",
         "read_chat",
+        "search_messages",
         "list_teams",
         "list_channels",
         "read_channel_threads",
@@ -30,6 +31,8 @@ async def test_expected_mcp_tools_are_registered() -> None:
     by_name = {tool.name: tool for tool in tools}
     assert by_name["read_chat"].annotations is not None
     assert by_name["read_chat"].annotations.readOnlyHint is True
+    assert by_name["search_messages"].annotations is not None
+    assert by_name["search_messages"].annotations.readOnlyHint is True
     assert by_name["send_chat_message"].annotations is not None
     assert by_name["send_chat_message"].annotations.destructiveHint is True
     assert by_name["mark_chat_read"].annotations is not None

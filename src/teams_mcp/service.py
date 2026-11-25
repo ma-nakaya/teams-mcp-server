@@ -11,11 +11,18 @@ from .config import Settings
 from .errors import TeamsMcpError
 from .files import SelfFileSender
 from .models import Channel, Message, ReadState, Team, Thread
-from .parsers import parse_chat, parse_message, parse_vtt, recording_artifact
+from .parsers import (
+    parse_chat,
+    parse_message,
+    parse_search_hit,
+    parse_vtt,
+    recording_artifact,
+)
 from .read_boundary import resolve_read_boundary
 from .write_guard import ReadStateWriteGuard, WriteGuard
 
 ChatFilter = Literal["all", "direct", "group", "meeting", "self"]
+MAX_SEARCH_QUERY = 500
 
 
 def _rows(value: object, *keys: str) -> list[dict[str, Any]]:
@@ -271,6 +278,50 @@ class TeamsService:
             "channel_id": channel_id,
             "thread_count": len(threads),
             "threads": [thread.to_dict() for thread in threads],
+        }
+
+    async def search_messages(
+        self, query: str, *, limit: int = 25, offset: int = 0
+    ) -> dict[str, object]:
+        query = query.strip()
+        if not query or len(query) > MAX_SEARCH_QUERY:
+            raise ValueError(f"query must be 1-{MAX_SEARCH_QUERY} characters")
+        limit = min(max(limit, 1), 50)
+        offset = max(offset, 0)
+        raw, snapshot = await asyncio.gather(
+            self.api.search_messages(query, size=limit, offset=offset),
+            self.api.teams_snapshot(),
+        )
+        team_of_channel = {
+            channel_id: team_id
+            for team in _rows(snapshot, "teams")
+            if (team_id := _raw_string(team, "id", "teamId"))
+            for channel in _rows(team, "channels")
+            if (channel_id := _raw_string(channel, "id", "channelId", "threadId"))
+        }
+        result_set = next(
+            (
+                rows
+                for entity_set in _rows(_record(raw).get("EntitySets"))
+                for rows in _rows(entity_set.get("ResultSets"))
+            ),
+            {},
+        )
+        hits = []
+        for item in _rows(result_set.get("Results")):
+            hit = parse_search_hit(item)
+            if hit is None:
+                continue
+            if hit.channel_id:
+                hit.team_id = team_of_channel.get(hit.channel_id)
+            hits.append(hit)
+        total = result_set.get("Total")
+        return {
+            "query": query,
+            "offset": offset,
+            "total": total if isinstance(total, int) else None,
+            "count": len(hits),
+            "results": [hit.to_dict() for hit in hits],
         }
 
     async def list_meeting_chats(

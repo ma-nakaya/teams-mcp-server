@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 from urllib.parse import unquote
 
 from .file_markup import generic_file_labels, shared_file_labels
-from .models import Chat, ChatKind, Message, TranscriptEntry
+from .models import Chat, ChatKind, Message, SearchHit, TranscriptEntry
 
 
 class _TextExtractor(HTMLParser):
@@ -243,6 +243,36 @@ def parse_vtt(value: str) -> list[TranscriptEntry]:
         elif start:
             cue_lines.append(line)
     return entries
+
+
+def parse_search_hit(raw: dict[str, Any]) -> SearchHit | None:
+    """Normalize one substrate search result for a Teams message.
+
+    `ClientConversationId` is the chat ID for chats. For channel messages it is
+    `<channelId>;messageid=<rootId>`, which maps onto the channel-thread tools.
+    """
+    source = _record(raw.get("Source"))
+    conversation = _string(source, "ClientConversationId")
+    if not conversation:
+        return None
+    channel_id, marker, root = conversation.partition(";messageid=")
+    channel_name = _string(source, "ChannelName")
+    is_channel = bool(marker) or bool(channel_name)
+    sender = _record(_record(source.get("From") or source.get("Sender")).get("EmailAddress"))
+    summary = _string(raw, "HitHighlightedSummary") or _string(source, "Preview")
+    return SearchHit(
+        kind="channel" if is_channel else "chat",
+        chat_id=None if is_channel else conversation,
+        team_id=None,
+        channel_id=channel_id if is_channel else None,
+        root_message_id=(root or None) if is_channel else None,
+        team_name=_string(source, "TeamName"),
+        channel_name=channel_name,
+        sender_display_name=_string(sender, "Name"),
+        sent_at=_string(source, "DateTimeSent", "DateTimeReceived"),
+        summary=html_to_text(summary),
+        has_attachments=source.get("HasAttachments") is True,
+    )
 
 
 def recording_artifact(content: str) -> dict[str, str] | None:

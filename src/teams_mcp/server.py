@@ -75,6 +75,16 @@ async def read_chat(
 
 
 @mcp.tool(annotations=READ_ONLY)
+async def search_messages(query: str, limit: int = 25, offset: int = 0) -> dict[str, object]:
+    """チャットとチャネルのメッセージをキーワードで検索します。
+
+    チャットの結果は chat_id を read_chat へ、チャネルの結果は team_id、channel_id、
+    root_message_id を read_channel_thread へ渡して前後を読めます。既読は変えません。
+    """
+    return await service.search_messages(query, limit=limit, offset=offset)
+
+
+@mcp.tool(annotations=READ_ONLY)
 async def list_teams() -> dict[str, object]:
     """参加中のチームを一覧化します。"""
     return await service.list_teams()
