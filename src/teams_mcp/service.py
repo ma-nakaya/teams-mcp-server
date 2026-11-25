@@ -27,6 +27,21 @@ ChatFilter = Literal["all", "direct", "group", "meeting", "self"]
 MAX_SEARCH_QUERY = 500
 
 
+def _message_time(message: Message) -> str:
+    return message.compose_time or message.original_arrival_time or ""
+
+
+def _thread_replies(raw: object, channel_id: str, root_message_id: str) -> list[Message]:
+    """Parse a reply page, dropping the root post the service echoes back, oldest first."""
+    replies = [
+        parse_message(item, channel_id)
+        for item in record_rows(raw, "messages", "replies", "value")
+        if first_string(item, "id", "messageId") != root_message_id
+    ]
+    replies.sort(key=_message_time)
+    return replies
+
+
 def _read_state(value: object) -> ReadState:
     if value is True:
         return "read"
@@ -121,7 +136,7 @@ class TeamsService:
                     break
             if len(messages) >= limit:
                 break
-        messages.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
+        messages.sort(key=_message_time)
         return {
             "chat_id": chat_id,
             "count": len(messages),
@@ -205,12 +220,7 @@ class TeamsService:
         raw = await self.api.channel_replies(
             team_id, channel_id, root_message_id, limit=min(max(reply_limit, 1), 100)
         )
-        replies = [
-            parse_message(item, channel_id)
-            for item in record_rows(raw, "messages", "replies", "value")
-            if first_string(item, "id", "messageId") != root_message_id
-        ]
-        replies.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
+        replies = _thread_replies(raw, channel_id, root_message_id)
         return {
             "team_id": team_id,
             "channel_id": channel_id,
@@ -242,18 +252,10 @@ class TeamsService:
                 raw_replies = await self.api.channel_replies(
                     team_id, channel_id, root.id, limit=min(max(reply_limit, 1), 100)
                 )
-            replies = [
-                parse_message(item, channel_id)
-                for item in record_rows(raw_replies, "messages", "replies", "value")
-                if first_string(item, "id", "messageId") != root.id
-            ]
-            replies.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
-            return Thread(root=root, replies=replies)
+            return Thread(root=root, replies=_thread_replies(raw_replies, channel_id, root.id))
 
         threads = await asyncio.gather(*(load(root) for root in roots))
-        threads.sort(
-            key=lambda item: item.root.compose_time or item.root.original_arrival_time or ""
-        )
+        threads.sort(key=lambda thread: _message_time(thread.root))
         return {
             "team_id": team_id,
             "channel_id": channel_id,
