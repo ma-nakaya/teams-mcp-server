@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-import sys
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -9,7 +7,7 @@ from mcp.types import CallToolResult, ToolAnnotations
 
 from .api import TeamsApi
 from .auth import AuthManager
-from .config import Settings
+from .config import Settings, configure_logging
 from .files import file_tool_result
 from .service import TeamsService
 
@@ -283,11 +281,7 @@ async def reply_channel_thread(
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level, logging.INFO),
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(settings.log_level)
     settings.validate()
     mcp.run(transport="stdio")
 

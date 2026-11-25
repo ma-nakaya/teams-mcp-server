@@ -136,21 +136,28 @@ class SharePointDownloader:
         retried_auth = False
         redirects = 0
         while True:
-            async with self.api._client().stream(
-                "GET", url, headers=headers, follow_redirects=False
-            ) as response:
-                if response.status_code == 401 and headers and not retried_auth:
-                    token = await self.api.auth.get_sharepoint_token(host, force=True)
-                    headers = {"Authorization": f"Bearer {token}"}
-                    retried_auth = True
-                    continue
-                if response.is_redirect:
-                    redirects += 1
-                    url = self._redirect_target(url, response, host, redirects)
-                    headers = {}  # pre-authorized download URLs must not receive the token
-                    continue
-                self._raise_for_status(response)
-                return await self._write(response, destination)
+            try:
+                async with self.api._client().stream(
+                    "GET", url, headers=headers, follow_redirects=False
+                ) as response:
+                    if response.status_code == 401 and headers and not retried_auth:
+                        token = await self.api.auth.get_sharepoint_token(host, force=True)
+                        headers = {"Authorization": f"Bearer {token}"}
+                        retried_auth = True
+                        continue
+                    if response.is_redirect:
+                        redirects += 1
+                        url = self._redirect_target(url, response, host, redirects)
+                        headers = {}  # pre-authorized download URLs must not receive the token
+                        continue
+                    self._raise_for_status(response)
+                    return await self._write(response, destination)
+            except httpx.HTTPError as exc:
+                # The message can include the signed URL, so it is not passed through.
+                raise ApiError(
+                    "The SharePoint download failed at the network layer.",
+                    "download_network_error",
+                ) from exc
 
     @staticmethod
     def _redirect_target(url: str, response: httpx.Response, host: str, redirects: int) -> str:

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Callable
+import logging
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import httpx
 import pytest
 
 from teams_mcp.api import TeamsApi
-from teams_mcp.config import Settings
+from teams_mcp.config import Settings, configure_logging
 from teams_mcp.downloads import SharePointDownloader, safe_file_name
 from teams_mcp.errors import ApiError
 
@@ -178,6 +179,41 @@ async def test_unwritable_download_dir_is_reported_as_download_error(tmp_path: P
         with pytest.raises(ApiError) as error:
             await SharePointDownloader(api, settings).download(FILE_URL)
     assert error.value.code == "download_save_failed"
+
+
+@pytest.mark.asyncio
+async def test_network_failures_become_structured_errors_without_url(tmp_path: Path) -> None:
+    def connect_fails(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(f"cannot reach {request.url}", request=request)
+
+    calls = 0
+
+    def drops_mid_stream(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(302, headers={"Location": DOWNLOAD_URL})
+
+        async def body() -> AsyncIterator[bytes]:
+            yield b"partial"
+            raise httpx.ReadError(f"dropped {request.url}", request=request)
+
+        return httpx.Response(200, content=body())
+
+    for handler in (connect_fails, drops_mid_stream):
+        downloader, _, http = make(tmp_path, handler)
+        async with http:
+            with pytest.raises(ApiError) as error:
+                await downloader.download(FILE_URL)
+        assert error.value.code == "download_network_error"
+        assert "tempauth" not in str(error.value)
+        assert list(tmp_path.iterdir()) == []
+
+
+def test_logging_never_records_request_urls() -> None:
+    configure_logging("DEBUG")
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING
 
 
 def test_safe_file_name_cannot_escape_or_use_reserved_names() -> None:

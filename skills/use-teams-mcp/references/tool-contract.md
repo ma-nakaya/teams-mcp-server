@@ -35,7 +35,7 @@ Each returned message has an `attachments` list. Ordinary Teams attachments come
 
 Only GET requests are sent, only to the `*.sharepoint.com` host in `url`. Same-host redirects are followed at most three times without the bearer token; other redirects stop with `download_redirect_rejected`. Existing local files are never replaced; a free `name (n).ext` is chosen. The size limit is `TEAMS_MAX_DOWNLOAD_BYTES` (default 100 MiB). No Teams or SharePoint state changes.
 
-Errors have MCP `isError: true` and structured `error_code` and `message` fields. `download_url_rejected` means the URL is not an HTTPS SharePoint/OneDrive URL. `download_forbidden` means SharePoint refused the file, for example a meeting recording whose download is blocked or a file outside your access; report it and do not try to bypass it. `download_not_found`, `download_too_large`, `download_save_failed` (local directory not writable), and `download_http_<status>` are reported as-is.
+Errors have MCP `isError: true` and structured `error_code` and `message` fields. `download_url_rejected` means the URL is not an HTTPS SharePoint/OneDrive URL. `download_forbidden` means SharePoint refused the file, for example a meeting recording whose download is blocked or a file outside your access; report it and do not try to bypass it. `download_not_found`, `download_too_large`, `download_save_failed` (local directory not writable), `download_network_error`, and `download_http_<status>` are reported as-is. Request URLs are never logged: pre-authorized download URLs carry credentials in the query.
 
 ## State-change tools
 
