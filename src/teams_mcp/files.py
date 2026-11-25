@@ -85,6 +85,26 @@ async def file_tool_result(operation: Awaitable[dict[str, object]]) -> CallToolR
     )
 
 
+_REPLACE_ATTEMPTS = 10
+_REPLACE_DELAY_SECONDS = 0.05
+
+
+def _replace(source: str, destination: Path) -> None:
+    """os.replace, retried briefly on Windows sharing violations.
+
+    Antivirus or indexing services can hold a just-written file open for a moment,
+    which makes os.replace fail with PermissionError even though nothing is wrong.
+    """
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_DELAY_SECONDS)
+
+
 def _save_receipt(path: Path, value: dict[str, Any]) -> None:
     temporary: str | None = None
     try:
@@ -95,7 +115,7 @@ def _save_receipt(path: Path, value: dict[str, Any]) -> None:
             json.dump(value, stream, ensure_ascii=True)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        _replace(temporary, path)
     finally:
         if temporary is not None:
             Path(temporary).unlink(missing_ok=True)

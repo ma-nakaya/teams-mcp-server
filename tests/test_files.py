@@ -740,3 +740,37 @@ async def test_service_delegates_attachment_to_guarded_sender(
     sender_factory.assert_called_once_with(harness.api, allowed_settings)
     send.assert_awaited_once_with(SELF_CHAT, str(sample_pdf), harness.request_id, confirm=True)
     assert harness.files.calls == []
+
+
+def test_receipt_replace_retries_transient_sharing_violations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_replace = files_module.os.replace
+    calls: list[str] = []
+
+    def flaky_replace(source: str, destination: Path) -> None:
+        calls.append(source)
+        if len(calls) < 3:
+            raise PermissionError("held by another process")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(files_module.os, "replace", flaky_replace)
+    monkeypatch.setattr(files_module, "_REPLACE_DELAY_SECONDS", 0)
+    target = tmp_path / "receipt.json"
+    files_module._save_receipt(target, {"version": 1})
+    assert json.loads(target.read_text(encoding="utf-8")) == {"version": 1}
+    assert len(calls) == 3
+    assert [p.name for p in tmp_path.iterdir()] == ["receipt.json"]
+
+
+def test_receipt_replace_gives_up_after_bounded_attempts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def always_denied(source: str, destination: Path) -> None:
+        raise PermissionError("held by another process")
+
+    monkeypatch.setattr(files_module.os, "replace", always_denied)
+    monkeypatch.setattr(files_module, "_REPLACE_DELAY_SECONDS", 0)
+    with pytest.raises(PermissionError):
+        files_module._save_receipt(tmp_path / "receipt.json", {"version": 1})
+    assert list(tmp_path.iterdir()) == []
