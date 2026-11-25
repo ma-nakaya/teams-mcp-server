@@ -89,6 +89,17 @@ def test_shared_files_ignore_deleted_and_malformed_values() -> None:
     )
 
 
+def test_malformed_attachment_urls_keep_the_attachment_without_url() -> None:
+    files = [
+        {"fileName": "a.pdf", "objectUrl": "https://[bad/a.pdf"},
+        {"fileName": "b.pdf", "objectUrl": "https://contoso.sharepoint.com:invalid/b.pdf"},
+        {"fileName": "c.pdf", "objectUrl": "https://contoso.sharepoint.com:8443/c.pdf"},
+    ]
+    labels = shared_file_labels(files)
+    assert [item["name"] for item in labels] == ["a.pdf", "b.pdf", "c.pdf"]
+    assert all(item["url"] is None for item in labels)
+
+
 def test_nonfile_and_unclosed_markup_are_not_reported_as_files() -> None:
     assert (
         generic_file_labels('<URIObject type="Picture.1"><OriginalName v="x" /></URIObject>') == []

@@ -53,13 +53,17 @@ def _sharepoint_url(value: object) -> tuple[str, str] | None:
     """Return a credential-free SharePoint URL and its storage kind, or None."""
     if not isinstance(value, str) or len(value) > 2048:
         return None
-    parsed = urlsplit(value.strip())
-    host = (parsed.hostname or "").lower()
+    try:
+        parsed = urlsplit(value.strip())
+        host = (parsed.hostname or "").lower()
+        has_port = parsed.port is not None
+    except ValueError:  # malformed host or port must not abort a whole message read
+        return None
     if (
         parsed.scheme != "https"
         or parsed.username
         or parsed.password
-        or parsed.port
+        or has_port
         or not host.endswith(".sharepoint.com")
     ):
         return None
