@@ -48,7 +48,9 @@ Graph APIはスコープ要求にも通信先にも含めない。Playwright、S
 
 SharePoint用tokenには、本人の権限の範囲で書き込みもできるscopeが付く。読み取り専用の用途に限定するため、`downloads.py`はGET以外の要求を持たない構造にする。この境界を広げる変更は、書き込みモデル（下記）と同じ三重ガードの設計なしに行わない。
 
-request URLはログに出さない。署名付き文字起こしURLと事前認可されたダウンロードURLは、クエリに認証情報を含むためである。
+request URLはログに出さない。署名付き文字起こしURLと事前認可されたダウンロードURLは、クエリに認証情報を含むためである。`config.configure_logging()`が、指定したログレベルに関係なくhttpx／httpcoreのloggerをWARNINGに固定する。
+
+Windowsでは、保存するファイルにInternetゾーンのMark of the Web（`Zone.Identifier`）を付ける。Officeのマクロのブロックなどはこの印に基づくためである。印は一時ファイルに付けてからハードリンクで所定の名前に置くので、印のない状態でファイルが見えることはない。印を書けない保存先では保存しない。
 
 ## 認証境界
 
