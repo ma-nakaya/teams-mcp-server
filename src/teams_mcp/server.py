@@ -24,6 +24,13 @@ READ_ONLY = ToolAnnotations(
     idempotentHint=True,
     openWorldHint=True,
 )
+# Reads remote content but creates a local file, so it is not marked read-only.
+DOWNLOAD = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
+    openWorldHint=True,
+)
 WRITE = ToolAnnotations(
     readOnlyHint=False,
     destructiveHint=True,
@@ -173,6 +180,16 @@ async def collect_meeting_artifacts(
         limit_chats=limit_chats,
         max_entries_per_meeting=max_entries_per_meeting,
     )
+
+
+@mcp.tool(annotations=DOWNLOAD)
+async def download_attachment(url: str) -> Annotated[CallToolResult, dict[str, object]]:
+    """Teams の添付 (SharePoint/OneDrive の url) をローカルへ保存します。
+
+    read_chat などが返す attachments[].url を渡します。GET だけを行い、Teams 側は
+    変更しません。保存先は TEAMS_DOWNLOAD_DIR で、既存ファイルは上書きしません。
+    """
+    return await file_tool_result(service.download_attachment(url))
 
 
 @mcp.tool(annotations=WRITE)

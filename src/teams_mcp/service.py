@@ -8,6 +8,7 @@ from typing import Any, Literal
 from .api import TeamsApi
 from .auth import AuthManager
 from .config import Settings
+from .downloads import SharePointDownloader
 from .errors import TeamsMcpError
 from .files import SelfFileSender
 from .models import Channel, Message, ReadState, Team, Thread
@@ -484,6 +485,9 @@ class TeamsService:
             "content_sha256": authorized.content_sha256,
             "response": response,
         }
+
+    async def download_attachment(self, url: str) -> dict[str, object]:
+        return await SharePointDownloader(self.api, self.settings).download(url)
 
     async def send_chat_file(
         self, chat_id: str, file_path: str, request_id: str, *, confirm: bool
