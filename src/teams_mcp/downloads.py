@@ -20,9 +20,9 @@ from urllib.parse import unquote, urljoin, urlsplit
 import httpx
 
 from .api import TeamsApi
+from .attachments import sharepoint_location
 from .config import Settings
 from .errors import ApiError
-from .file_markup import sharepoint_location
 
 _MAX_REDIRECTS = 3
 # Filesystems allow 255 bytes (POSIX) or 255 UTF-16 units (NTFS) per name. UTF-8
@@ -174,7 +174,7 @@ class SharePointDownloader:
         redirects = 0
         while True:
             try:
-                async with self.api._client().stream(
+                async with self.api.client().stream(
                     "GET", url, headers=headers, follow_redirects=False
                 ) as response:
                     if response.status_code == 401 and headers and not retried_auth:

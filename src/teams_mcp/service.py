@@ -20,33 +20,26 @@ from .parsers import (
     recording_artifact,
 )
 from .read_boundary import resolve_read_boundary
+from .records import as_record, first_string, record_rows
 from .write_guard import ReadStateWriteGuard, WriteGuard
 
 ChatFilter = Literal["all", "direct", "group", "meeting", "self"]
 MAX_SEARCH_QUERY = 500
 
 
-def _rows(value: object, *keys: str) -> list[dict[str, Any]]:
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, dict)]
-    if isinstance(value, dict):
-        for key in keys:
-            nested = value.get(key)
-            if isinstance(nested, list):
-                return [item for item in nested if isinstance(item, dict)]
-    return []
+def _message_time(message: Message) -> str:
+    return message.compose_time or message.original_arrival_time or ""
 
 
-def _raw_string(record: dict[str, Any], *keys: str) -> str | None:
-    for key in keys:
-        value = record.get(key)
-        if value is not None and str(value):
-            return str(value)
-    return None
-
-
-def _record(value: object) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+def _thread_replies(raw: object, channel_id: str, root_message_id: str) -> list[Message]:
+    """Parse a reply page, dropping the root post the service echoes back, oldest first."""
+    replies = [
+        parse_message(item, channel_id)
+        for item in record_rows(raw, "messages", "replies", "value")
+        if first_string(item, "id", "messageId") != root_message_id
+    ]
+    replies.sort(key=_message_time)
+    return replies
 
 
 def _read_state(value: object) -> ReadState:
@@ -88,7 +81,9 @@ class TeamsService:
             self.api.teams_snapshot(),
         )
         csa_chats = {
-            chat_id: raw for raw in _rows(snapshot, "chats") if (chat_id := _raw_string(raw, "id"))
+            chat_id: raw
+            for raw in record_rows(snapshot, "chats")
+            if (chat_id := first_string(raw, "id"))
         }
         chats = []
         for raw in conversations:
@@ -141,7 +136,7 @@ class TeamsService:
                     break
             if len(messages) >= limit:
                 break
-        messages.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
+        messages.sort(key=_message_time)
         return {
             "chat_id": chat_id,
             "count": len(messages),
@@ -151,8 +146,8 @@ class TeamsService:
     async def list_teams(self) -> dict[str, object]:
         teams: list[Team] = []
         snapshot = await self.api.teams_snapshot()
-        for raw in _rows(snapshot, "teams"):
-            team_id = _raw_string(raw, "id", "teamId")
+        for raw in record_rows(snapshot, "teams"):
+            team_id = first_string(raw, "id", "teamId")
             if not team_id:
                 continue
             if raw.get("isDeleted") is True:
@@ -160,7 +155,7 @@ class TeamsService:
             teams.append(
                 Team(
                     id=team_id,
-                    name=_raw_string(raw, "displayName", "name") or "Unknown team",
+                    name=first_string(raw, "displayName", "name") or "Unknown team",
                 )
             )
         teams.sort(key=lambda team: team.name.casefold())
@@ -171,8 +166,8 @@ class TeamsService:
         selected = next(
             (
                 team
-                for team in _rows(snapshot, "teams")
-                if _raw_string(team, "id", "teamId") == team_id
+                for team in record_rows(snapshot, "teams")
+                if first_string(team, "id", "teamId") == team_id
             ),
             None,
         )
@@ -184,10 +179,10 @@ class TeamsService:
                 "channels": [],
             }
         channels: list[Channel] = []
-        for item in _rows(selected, "channels"):
+        for item in record_rows(selected, "channels"):
             if item.get("isDeleted") is True:
                 continue
-            channel_id = _raw_string(item, "id", "channelId", "threadId")
+            channel_id = first_string(item, "id", "channelId", "threadId")
             if not channel_id:
                 continue
             read_state = _read_state(item.get("isMessageRead"))
@@ -195,8 +190,8 @@ class TeamsService:
             channel = Channel(
                 id=channel_id,
                 team_id=team_id,
-                name=_raw_string(item, "name", "displayName", "topic") or "Unknown channel",
-                description=_raw_string(item, "description"),
+                name=first_string(item, "name", "displayName", "topic") or "Unknown channel",
+                description=first_string(item, "description"),
                 read_state=read_state,
                 important_message_read_state=important_state,
                 read_state_source=(
@@ -225,12 +220,7 @@ class TeamsService:
         raw = await self.api.channel_replies(
             team_id, channel_id, root_message_id, limit=min(max(reply_limit, 1), 100)
         )
-        replies = [
-            parse_message(item, channel_id)
-            for item in _rows(raw, "messages", "replies", "value")
-            if _raw_string(item, "id", "messageId") != root_message_id
-        ]
-        replies.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
+        replies = _thread_replies(raw, channel_id, root_message_id)
         return {
             "team_id": team_id,
             "channel_id": channel_id,
@@ -249,7 +239,7 @@ class TeamsService:
     ) -> dict[str, object]:
         thread_limit = min(max(thread_limit, 1), 50)
         raw = await self.api.channel_messages(team_id, channel_id, limit=thread_limit)
-        parsed = [parse_message(item, channel_id) for item in _rows(raw, "messages", "value")]
+        parsed = [parse_message(item, channel_id) for item in record_rows(raw, "messages", "value")]
         roots = [
             message
             for message in parsed
@@ -262,18 +252,10 @@ class TeamsService:
                 raw_replies = await self.api.channel_replies(
                     team_id, channel_id, root.id, limit=min(max(reply_limit, 1), 100)
                 )
-            replies = [
-                parse_message(item, channel_id)
-                for item in _rows(raw_replies, "messages", "replies", "value")
-                if _raw_string(item, "id", "messageId") != root.id
-            ]
-            replies.sort(key=lambda item: item.compose_time or item.original_arrival_time or "")
-            return Thread(root=root, replies=replies)
+            return Thread(root=root, replies=_thread_replies(raw_replies, channel_id, root.id))
 
         threads = await asyncio.gather(*(load(root) for root in roots))
-        threads.sort(
-            key=lambda item: item.root.compose_time or item.root.original_arrival_time or ""
-        )
+        threads.sort(key=lambda thread: _message_time(thread.root))
         return {
             "team_id": team_id,
             "channel_id": channel_id,
@@ -295,21 +277,21 @@ class TeamsService:
         )
         team_of_channel = {
             channel_id: team_id
-            for team in _rows(snapshot, "teams")
-            if (team_id := _raw_string(team, "id", "teamId"))
-            for channel in _rows(team, "channels")
-            if (channel_id := _raw_string(channel, "id", "channelId", "threadId"))
+            for team in record_rows(snapshot, "teams")
+            if (team_id := first_string(team, "id", "teamId"))
+            for channel in record_rows(team, "channels")
+            if (channel_id := first_string(channel, "id", "channelId", "threadId"))
         }
         result_set = next(
             (
                 rows
-                for entity_set in _rows(_record(raw).get("EntitySets"))
-                for rows in _rows(entity_set.get("ResultSets"))
+                for entity_set in record_rows(as_record(raw).get("EntitySets"))
+                for rows in record_rows(entity_set.get("ResultSets"))
             ),
             {},
         )
         hits = []
-        for item in _rows(result_set.get("Results")):
+        for item in record_rows(result_set.get("Results")):
             hit = parse_search_hit(item)
             if hit is None:
                 continue
@@ -346,7 +328,11 @@ class TeamsService:
         self.read_state_writes.authorize(target=target, confirm=confirm)
         snapshot = await self.api.teams_snapshot(force=True)
         raw = next(
-            (item for item in _rows(snapshot, "chats") if _raw_string(item, "id") == chat_id),
+            (
+                item
+                for item in record_rows(snapshot, "chats")
+                if first_string(item, "id") == chat_id
+            ),
             None,
         )
         if raw is None:
@@ -388,16 +374,16 @@ class TeamsService:
         team = next(
             (
                 item
-                for item in _rows(snapshot, "teams")
-                if _raw_string(item, "id", "teamId") == team_id
+                for item in record_rows(snapshot, "teams")
+                if first_string(item, "id", "teamId") == team_id
             ),
             None,
         )
         raw = next(
             (
                 item
-                for item in _rows(team or {}, "channels")
-                if _raw_string(item, "id", "channelId", "threadId") == channel_id
+                for item in record_rows(team or {}, "channels")
+                if first_string(item, "id", "channelId", "threadId") == channel_id
             ),
             None,
         )
@@ -448,13 +434,13 @@ class TeamsService:
             chat_id, page_size=200, max_pages=min(max(max_pages, 1), 20)
         ):
             for raw in page:
-                message_type = _raw_string(raw, "messagetype", "messageType")
+                message_type = first_string(raw, "messagetype", "messageType")
                 if message_type != "RichText/Media_CallRecording":
                     continue
-                content = _raw_string(raw, "content") or ""
+                content = first_string(raw, "content") or ""
                 artifact = recording_artifact(content)
                 if artifact:
-                    source_message_id = _raw_string(raw, "id", "messageId")
+                    source_message_id = first_string(raw, "id", "messageId")
                     break
             if artifact:
                 break

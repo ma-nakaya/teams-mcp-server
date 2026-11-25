@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .errors import TeamsMcpError
-from .parsers import _record
+from .records import as_record
 
 
 def _message_id(value: object) -> str | None:
@@ -14,7 +14,7 @@ def _message_id(value: object) -> str | None:
 
 
 def _horizon_message_id(raw: dict[str, Any]) -> str | None:
-    horizon = _record(raw.get("consumptionHorizon") or raw.get("userConsumptionHorizon"))
+    horizon = as_record(raw.get("consumptionHorizon") or raw.get("userConsumptionHorizon"))
     return _message_id(horizon.get("originalArrivalTime"))
 
 
@@ -35,7 +35,7 @@ def resolve_read_boundary(
             "Specify exactly one of through_message_id or through_latest=true.",
             "read_boundary_required",
         )
-    latest = _message_id(_record(raw.get("lastMessage")).get("id"))
+    latest = _message_id(as_record(raw.get("lastMessage")).get("id"))
     if latest is None:
         raise TeamsMcpError(
             "Teams did not provide a usable latest-message boundary for this target.",
