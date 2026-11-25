@@ -5,6 +5,7 @@ import hashlib
 import logging
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -223,4 +224,33 @@ def test_safe_file_name_cannot_escape_or_use_reserved_names() -> None:
     assert safe_file_name("") == "attachment"
     assert safe_file_name(" . ") == "attachment"
     long_name = safe_file_name("x" * 500 + ".step")
-    assert long_name.endswith(".step") and len(long_name) <= 180
+    assert long_name.endswith(".step") and len(long_name.encode()) <= 200
+
+
+@pytest.mark.parametrize("name", ["あ" * 100 + ".pdf", "😀" * 100 + ".docx", "資料" * 90])
+def test_multibyte_names_fit_the_filesystem_byte_limit(name: str) -> None:
+    safe = safe_file_name(name)
+    assert len(safe.encode("utf-8")) <= 200
+    assert len(safe.encode("utf-16-le")) // 2 <= 200
+    if "." in name:
+        assert safe.endswith("." + name.rpartition(".")[2])
+
+
+@pytest.mark.asyncio
+async def test_long_japanese_name_is_saved_with_collision_suffix(tmp_path: Path) -> None:
+    name = "あ" * 100 + ".pdf"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=BODY,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"},
+        )
+
+    downloader, _, http = make(tmp_path, handler)
+    async with http:
+        first = await downloader.download(FILE_URL)
+        second = await downloader.download(FILE_URL)
+    assert Path(str(first["path"])).read_bytes() == BODY
+    assert str(second["file_name"]).endswith(" (1).pdf")
+    assert all(len(p.name.encode()) <= 255 for p in tmp_path.iterdir())

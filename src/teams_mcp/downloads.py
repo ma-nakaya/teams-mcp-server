@@ -25,7 +25,11 @@ from .errors import ApiError
 from .file_markup import sharepoint_location
 
 _MAX_REDIRECTS = 3
-_MAX_NAME = 180
+# Filesystems allow 255 bytes (POSIX) or 255 UTF-16 units (NTFS) per name. UTF-8
+# bytes are never fewer than UTF-16 units, so a UTF-8 cap satisfies both. The
+# remaining room covers the " (999)" collision suffix added by _store().
+_MAX_NAME_BYTES = 200
+_MAX_SUFFIX_BYTES = 20
 _UNSAFE_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
 _RESERVED_NAMES = {
     "CON",
@@ -52,9 +56,15 @@ def safe_file_name(value: str | None) -> str:
         stem, suffix = name, ""
     if stem.upper() in _RESERVED_NAMES:
         stem = f"_{stem}"
-    suffix = suffix[:20]
-    stem = stem[: _MAX_NAME - len(suffix) - 1] if suffix else stem[:_MAX_NAME]
+    suffix = _truncate_utf8(suffix, _MAX_SUFFIX_BYTES)
+    reserved = len(suffix.encode("utf-8")) + 1 if suffix else 0
+    stem = _truncate_utf8(stem, _MAX_NAME_BYTES - reserved) or "attachment"
     return f"{stem}.{suffix}" if suffix else stem
+
+
+def _truncate_utf8(value: str, limit: int) -> str:
+    """Cut to at most `limit` UTF-8 bytes without splitting a character."""
+    return value.encode("utf-8")[:limit].decode("utf-8", errors="ignore")
 
 
 def _disposition_name(response: httpx.Response) -> str | None:
