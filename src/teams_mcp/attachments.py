@@ -1,3 +1,5 @@
+"""Attachment metadata in Teams messages, and the SharePoint URLs they point to."""
+
 from __future__ import annotations
 
 import json

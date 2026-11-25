@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar
 from urllib.parse import unquote
 
-from .file_markup import generic_file_labels, shared_file_labels
+from .attachments import generic_file_labels, shared_file_labels
 from .models import Chat, ChatKind, Message, SearchHit, TranscriptEntry
 from .records import as_record, first_string
 

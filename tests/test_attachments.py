@@ -1,6 +1,6 @@
 import json
 
-from teams_mcp.file_markup import generic_file_labels, shared_file_labels
+from teams_mcp.attachments import generic_file_labels, shared_file_labels
 from teams_mcp.parsers import parse_message
 
 
