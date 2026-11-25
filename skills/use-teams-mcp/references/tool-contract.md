@@ -31,9 +31,9 @@ Each returned message has an `attachments` list. Ordinary Teams attachments come
 
 | Tool | Parameters and bounds | Effect |
 |---|---|---|
-| `download_attachment` | `url`: an `attachments[].url` value | Save the SharePoint/OneDrive file to `TEAMS_DOWNLOAD_DIR` and return `status: "downloaded"`, `storage`, `path`, `file_name`, `size_bytes`, `sha256`, and `content_type`. |
+| `download_attachment` | `url`: an `attachments[].url` value | Save the SharePoint/OneDrive file to `TEAMS_DOWNLOAD_DIR` and return `status: "downloaded"`, `storage`, `path`, `file_name`, `size_bytes`, `sha256`, `content_type`, and `marked_from_internet`. |
 
-Only GET requests are sent, only to the `*.sharepoint.com` host in `url`. Same-host redirects are followed at most three times without the bearer token; other redirects stop with `download_redirect_rejected`. Existing local files are never replaced; a free `name (n).ext` is chosen. The size limit is `TEAMS_MAX_DOWNLOAD_BYTES` (default 100 MiB). No Teams or SharePoint state changes.
+Only GET requests are sent, only to the `*.sharepoint.com` host in `url`. Same-host redirects are followed at most three times without the bearer token; other redirects stop with `download_redirect_rejected`. Existing local files are never replaced; a free `name (n).ext` is chosen. On Windows the file receives the Internet-zone Mark of the Web (`Zone.Identifier`, `ZoneId=3`) before it becomes visible, so Office and SmartScreen protections apply; if the mark cannot be written, nothing is saved and `download_motw_failed` is returned. The size limit is `TEAMS_MAX_DOWNLOAD_BYTES` (default 100 MiB). No Teams or SharePoint state changes.
 
 Errors have MCP `isError: true` and structured `error_code` and `message` fields. `download_url_rejected` means the URL is not an HTTPS SharePoint/OneDrive URL. `download_forbidden` means SharePoint refused the file, for example a meeting recording whose download is blocked or a file outside your access; report it and do not try to bypass it. `download_not_found`, `download_too_large`, `download_save_failed` (local directory not writable), `download_network_error`, and `download_http_<status>` are reported as-is. Request URLs are never logged: pre-authorized download URLs carry credentials in the query.
 

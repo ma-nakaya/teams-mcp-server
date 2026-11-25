@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import os
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from urllib.parse import quote
@@ -10,6 +11,7 @@ from urllib.parse import quote
 import httpx
 import pytest
 
+import teams_mcp.downloads as downloads_module
 from teams_mcp.api import TeamsApi
 from teams_mcp.config import Settings, configure_logging
 from teams_mcp.downloads import SharePointDownloader, safe_file_name
@@ -225,6 +227,51 @@ def test_safe_file_name_cannot_escape_or_use_reserved_names() -> None:
     assert safe_file_name(" . ") == "attachment"
     long_name = safe_file_name("x" * 500 + ".step")
     assert long_name.endswith(".step") and len(long_name.encode()) <= 200
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("CON.report.pdf", "_CON.report.pdf"),
+        ("nul.backup.txt", "_nul.backup.txt"),
+        ("COM1 .notes.docx", "_COM1 .notes.docx"),
+        ("lpt9", "_lpt9"),
+        ("CONSOLE.txt", "CONSOLE.txt"),
+        ("report.CON.pdf", "report.CON.pdf"),
+    ],
+)
+def test_reserved_device_names_are_checked_before_the_first_dot(name: str, expected: str) -> None:
+    assert safe_file_name(name) == expected
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Mark of the Web is a Windows feature")
+@pytest.mark.asyncio
+async def test_saved_file_carries_internet_zone_mark(tmp_path: Path) -> None:
+    downloader, _, http = make(tmp_path, redirecting_handler([]))
+    async with http:
+        result = await downloader.download(FILE_URL + "?share=tok")
+    assert result["marked_from_internet"] is True
+    with open(f"{result['path']}:Zone.Identifier", encoding="utf-8") as stream:
+        mark = stream.read()
+    assert "ZoneId=3" in mark
+    assert f"HostUrl={FILE_URL}" in mark
+    assert "tok" not in mark
+
+
+@pytest.mark.asyncio
+async def test_unmarkable_download_is_not_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(path: Path, source_url: str) -> bool:
+        raise ApiError("cannot mark", "download_motw_failed")
+
+    monkeypatch.setattr(downloads_module, "mark_from_internet", fail)
+    downloader, _, http = make(tmp_path, redirecting_handler([]))
+    async with http:
+        with pytest.raises(ApiError) as error:
+            await downloader.download(FILE_URL)
+    assert error.value.code == "download_motw_failed"
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("name", ["あ" * 100 + ".pdf", "😀" * 100 + ".docx", "資料" * 90])

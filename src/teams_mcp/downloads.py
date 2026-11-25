@@ -51,11 +51,13 @@ def safe_file_name(value: str | None) -> str:
     name = _UNSAFE_NAME.sub("_", value or "").strip(" .")
     if not name:
         name = "attachment"
+    # Windows treats "CON.report.pdf" and "COM1 .txt" as the device, so check the
+    # part before the first dot with trailing spaces removed.
+    if name.split(".", 1)[0].rstrip(" ").upper() in _RESERVED_NAMES:
+        name = f"_{name}"
     stem, dot, suffix = name.rpartition(".")
     if not dot:
         stem, suffix = name, ""
-    if stem.upper() in _RESERVED_NAMES:
-        stem = f"_{stem}"
     suffix = _truncate_utf8(suffix, _MAX_SUFFIX_BYTES)
     reserved = len(suffix.encode("utf-8")) + 1 if suffix else 0
     stem = _truncate_utf8(stem, _MAX_NAME_BYTES - reserved) or "attachment"
@@ -80,6 +82,27 @@ def _disposition_name(response: httpx.Response) -> str | None:
 def _url_name(url: str) -> str | None:
     segment = urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1]
     return unquote(segment) or None
+
+
+def mark_from_internet(path: Path, source_url: str) -> bool:
+    """Attach the Windows Mark of the Web, as a browser download would.
+
+    Office and SmartScreen rely on it to block macros and active content from
+    the Internet. Without it the file must not be handed over, so failure stops
+    the download. Returns False on platforms without zone identifiers.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        with open(f"{path}:Zone.Identifier", "w", encoding="utf-8") as stream:
+            stream.write(f"[ZoneTransfer]\r\nZoneId=3\r\nHostUrl={source_url}\r\n")
+    except OSError as exc:
+        raise ApiError(
+            "The download could not be marked as coming from the Internet, so it was not "
+            "saved. Use a TEAMS_DOWNLOAD_DIR on an NTFS volume.",
+            "download_motw_failed",
+        ) from exc
+    return True
 
 
 def _store(directory: Path, name: str, temporary: Path) -> Path:
@@ -121,6 +144,9 @@ class SharePointDownloader:
             temporary = Path(raw_temporary)
             try:
                 size, digest, content_type, name = await self._fetch(host, endpoint, temporary)
+                # Hard links share alternate data streams, so marking the temporary
+                # file marks the saved one before it ever becomes visible.
+                marked = mark_from_internet(temporary, clean_url)
                 stored = _store(directory, safe_file_name(name or _url_name(clean_url)), temporary)
             finally:
                 temporary.unlink(missing_ok=True)
@@ -136,6 +162,7 @@ class SharePointDownloader:
             "size_bytes": size,
             "sha256": digest,
             "content_type": content_type,
+            "marked_from_internet": marked,
         }
 
     async def _fetch(
