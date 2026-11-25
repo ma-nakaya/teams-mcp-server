@@ -11,6 +11,7 @@ Use these bare tool names. A client may display its own server namespace separat
 | `teams_auth_status` | None | Refresh an expired session when possible and return non-secret status fields. |
 | `list_recent_chats` | `kind`: `all` (default), `direct`, `group`, `meeting`, or `self`; `limit`: default 50, clamped to 1–200; `unread_only`: default false | List recent chats with normalized read state. |
 | `read_chat` | `chat_id`; `limit`: default 100, clamped to 1–500; optional `before_ms`: Unix epoch milliseconds | Read direct or group chat messages. A call scans at most five internal pages. |
+| `search_messages` | `query`: 1–500 characters after trimming; `limit`: default 25, clamped to 1–50; `offset`: default 0, minimum 0 | Search chat and channel messages through substrate search. Each result has `kind` (`chat` or `channel`), `summary`, `sender_display_name`, `sent_at`, and `has_attachments`. Chat results carry `chat_id` for `read_chat`; channel results carry `team_id`, `channel_id`, and `root_message_id` for `read_channel_thread`. `team_id` is null when the channel's team is not in the joined-team snapshot. `total` is the service's estimate. |
 | `list_teams` | None | List joined teams. |
 | `list_channels` | `team_id`; `unread_only`: default false | List a team's channels with normalized read state. |
 | `read_channel_threads` | `team_id`, `channel_id`; `thread_limit`: default 25, clamped to 1–50; `reply_limit`: default 50, clamped to 1–100 | Read channel parent posts and bounded replies. |

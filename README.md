@@ -70,6 +70,7 @@ uv run teams-mcp login-complete
 | `teams_auth_status` | 秘密を含まない認証状態。期限切れトークンは更新可能なら自動更新 |
 | `list_recent_chats` | DM、グループ、会議チャットの一覧。`read_state` と `unread_only` に対応 |
 | `read_chat` | DM／グループチャットの本文 |
+| `search_messages` | チャットとチャネルのメッセージをキーワードで検索。結果の ID は `read_chat`／`read_channel_thread` にそのまま渡せる |
 | `list_teams` / `list_channels` | チーム／チャネルの一覧。チャネルは `read_state` と `unread_only` に対応 |
 | `read_channel_threads` | チャネルの親投稿と返信をまとめて取得 |
 | `read_channel_thread` | 1 スレッドの返信を取得 |

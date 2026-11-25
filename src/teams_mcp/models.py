@@ -103,6 +103,26 @@ class Thread:
 
 
 @dataclass(slots=True)
+class SearchHit:
+    """One Teams message found by search, with the IDs the read tools accept."""
+
+    kind: Literal["chat", "channel"]
+    chat_id: str | None
+    team_id: str | None
+    channel_id: str | None
+    root_message_id: str | None
+    team_name: str | None
+    channel_name: str | None
+    sender_display_name: str | None
+    sent_at: str | None
+    summary: str
+    has_attachments: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class TranscriptEntry:
     speaker: str
     start_time: str

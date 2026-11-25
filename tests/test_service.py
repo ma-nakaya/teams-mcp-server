@@ -19,6 +19,7 @@ class FakeAuth:
 class FakeApi:
     def __init__(self) -> None:
         self.read_state_writes: list[tuple[str, str, int]] = []
+        self.search_calls: list[tuple[str, int, int]] = []
 
     async def list_conversations(self, page_size: int = 500) -> list[dict[str, Any]]:
         del page_size
@@ -121,9 +122,82 @@ class FakeApi:
             }
         ]
 
+    async def search_messages(self, query: str, *, size: int, offset: int) -> object:
+        self.search_calls.append((query, size, offset))
+        return {
+            "EntitySets": [
+                {
+                    "ResultSets": [
+                        {
+                            "Total": 2,
+                            "Results": [
+                                {
+                                    "HitHighlightedSummary": "see <c0>plan</c0>",
+                                    "Source": {
+                                        "ClientConversationId": "19:direct",
+                                        "From": {"EmailAddress": {"Name": "Alice"}},
+                                        "DateTimeSent": "2026-11-25T01:00:00Z",
+                                        "HasAttachments": True,
+                                    },
+                                },
+                                {
+                                    "HitHighlightedSummary": "plan update",
+                                    "Source": {
+                                        "ClientConversationId": "channel-1;messageid=1700",
+                                        "ChannelName": "General",
+                                        "TeamName": "Team One",
+                                        "From": {"EmailAddress": {"Name": "Bob"}},
+                                    },
+                                },
+                                {"Source": {}},
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+
 
 def service() -> TeamsService:
     return TeamsService(FakeAuth(), FakeApi())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_search_returns_ids_that_read_tools_accept() -> None:
+    api = FakeApi()
+    result = await TeamsService(FakeAuth(), api).search_messages(  # type: ignore[arg-type]
+        "  plan  ", limit=500, offset=-3
+    )
+    assert api.search_calls == [("plan", 50, 0)]
+    assert result["total"] == 2
+    assert result["count"] == 2
+    chat, channel = result["results"]  # type: ignore[misc]
+    assert chat == {
+        "kind": "chat",
+        "chat_id": "19:direct",
+        "team_id": None,
+        "channel_id": None,
+        "root_message_id": None,
+        "team_name": None,
+        "channel_name": None,
+        "sender_display_name": "Alice",
+        "sent_at": "2026-11-25T01:00:00Z",
+        "summary": "see plan",
+        "has_attachments": True,
+    }
+    assert channel["kind"] == "channel"
+    assert channel["chat_id"] is None
+    assert channel["team_id"] == "team-1"
+    assert channel["channel_id"] == "channel-1"
+    assert channel["root_message_id"] == "1700"
+    assert channel["channel_name"] == "General"
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_empty_or_oversized_queries() -> None:
+    for query in ("   ", "x" * 501):
+        with pytest.raises(ValueError, match="query"):
+            await service().search_messages(query)
 
 
 @pytest.mark.asyncio
