@@ -1,6 +1,6 @@
 # Teams内部APIメモ
 
-最終調査日: 2026-08-04
+最終調査日: 2026-11-25（初回調査: 2026-08-04）
 
 > [!CAUTION]
 > **Unofficial / 非公式** — この文書と実装はMicrosoftによる公式提供、承認、提携、サポートを受けたものではない。
@@ -24,7 +24,11 @@
 | channel messages | Chat Serviceの`conversations/{channelId}/messages` | `Authentication: skypetoken=...` | 実アカウントで検証 |
 | thread replies | Chat Serviceの`conversations/{channelId};messageid={rootId}/messages` | 同上 | 実アカウントで検証 |
 | transcript | 録画メッセージ内の`amsTranscript` URI | `Authorization: skype_token ...` | 実アカウントの非空VTTで検証 |
-| WorkingSetFiles | `substrate.office.com/api/beta/me/WorkingSetFiles` | substrate audienceのBearer | トークン発行までは成功、対象テナントでは`403 ErrorAccessDenied` |
+| WorkingSetFiles | `substrate.office.com/api/beta/me/WorkingSetFiles` | substrate audienceのBearer | 2026-08-04は`403 ErrorAccessDenied`。2026-11-25は`400 RequestBroker--ParseUri`（権限ではなくURL形式の誤り）。未使用 |
+| メッセージ検索 | `substrate.office.com/search/api/v2/query` POST | 同上 | 2026-11-25に実アカウントで検証。`search_messages`で使用 |
+| SharePoint／OneDrive用Bearer | `login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | refresh token、scope=`https://{host}/.default` | 2026-11-25に実アカウントで検証。チャネル用・OneDrive用とも発行可 |
+| 添付の取得 | `{host}/_api/v2.0/shares/u!{base64url(url)}/driveItem/content` | 上記SharePoint用Bearer | 2026-11-25に実アカウントで検証。同一ホストの事前認可URLへ302 |
+| チャットの添付メタデータ | Chat Service messageの`properties.files` | `Authentication: skypetoken=...` | 2026-11-25に実アカウントで検証 |
 
 Teamsの2026-08-04時点の公開Web bundleにはCSAホスト、`/api/v1/`、`teams/users/me`、`groupchats`、`nonrecentchats`、message get/post/updateの識別子が残っていることも確認した。ただしminified bundleは契約ではない。
 
@@ -42,6 +46,39 @@ Teamsの2026-08-04時点の公開Web bundleにはCSAホスト、`/api/v1/`、`te
 - member別`GET /v1/threads/{id}/consumptionhorizons`はsample targetで404だったため、他人のRead by／Seen by取得には使用しない。
 
 上記の件数は検証時点のアカウント状態であり、API仕様や製品上限ではない。
+
+## 2026-11-25 再調査結果
+
+同じ公開クライアントIDとrefresh tokenで、作成時に拒否されていた経路を読み取り専用で再確認した。値は出力せず、HTTP status、付与scope、項目名と件数だけを確認した。
+
+### 付与scopeの変化
+
+- substrate audienceのtokenに、`Files.ReadWrite`、`Files.ReadWrite.Shared`、`Notes-Internal.ReadWrite`、`SubstrateSearch-Internal.ReadWrite`、`Tasks.ReadWrite`などのdelegated scopeが付与されていた。
+- `GET substrate.office.com/api/v2.0/me`は`200`を返した。作成時の`403`系の拒否は解消している。
+- SharePoint audience（`00000003-0000-0ff1-ce00-000000000000`）のtokenを、チャネル用ホストとOneDrive用（`-my`）ホストの両方で発行できた。scopeは`Sites.FullControl.All`、`Sites.Manage.All`、`MyFiles.Write`、`User.ReadWrite.All`、`Container.Selected`。delegatedなので本人の権限の範囲に限られるが、書き込みもできる強さである。実装はこのtokenでGET以外を送らない。
+
+### 添付
+
+- 通常の添付（クリップで付けたファイル）は、本文HTMLではなくmessageの`properties.files`（JSON文字列）にある。各要素は`fileName`、`fileType`、`objectUrl`、`sharepointIds`、`openUrl`などを持つ。
+- 49会話の走査で、添付付きmessage 178件、添付226件。保存先はチャネル用SharePointと送信者のOneDrive。
+- `objectUrl`をshares APIで取得すると、同一ホストの事前認可URL（`tempauth`付き）へ302し、そこで本体が返る。チャネル用・OneDrive用の両方で画像1件ずつの取得を確認した。
+- 事前認可URLはクエリに認証情報を含む。httpxはINFOでrequest URLをログに出すため、サーバーとCLIはhttpx／httpcoreのloggerをWARNINGに固定する。
+
+### 会議録画
+
+- 録画messageの`RecordingContent`には、`onedriveForBusinessVideo`（OneDriveの共有リンク）と`onedriveForBusinessTranscript`（`/_api/v2.1/drives/.../transcripts/.../content`）がある。
+- 動画はメタデータ（サイズ等）を取得できるが、本体は事前認可URLで`403`になった（3件中3件）。ダウンロード禁止の設定によるものとみられ、回避しない。
+- OneDrive側の文字起こしは`text/vtt`で取得できた。ただし13会議の走査で、OneDrive側にだけ文字起こしがある会議は0件だった（AMS側に必ずあった）。代替経路は実装していない。
+
+### メッセージ検索
+
+- `POST /search/api/v2/query`に`EntityType: Message`、`ContentSources: ["Teams"]`、`Scenario: {"Name": "teams"}`で`200`。`Scenario`がないと`400 Scenario Name must be specified.`、`powerbar`や`TeamsWeb`では`500`。`X-AnchorMailbox`は不要だった。
+- 結果の`Source.ClientConversationId`は、チャットではChat Serviceの会話ID、チャネルでは`<channelId>;messageid=<rootId>`。既存の読み取りtoolへそのまま渡せる。
+- 30件の検証で、チャット22件はすべて`read_chat`で、`team_id`を解決できたチャネル6件はすべて`read_channel_thread`で読めた。残りのチャネル2件は参加チームのsnapshotにないため`team_id`がnullになった。
+
+### AIリキャップ
+
+- 契約を確定できていない状態は変わらない。`WorkingSetFiles`は権限エラーではなくなったが、正しい要求形式は未確認。
 
 ## Graphを使わない理由と代償
 

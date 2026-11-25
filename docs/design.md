@@ -23,6 +23,10 @@ TeamsService ---- WriteGuard (default deny / exact allowlist / per-call confirm)
     |
     +---- AMS ----------------- meeting transcript (VTT)
     |
+    +---- Substrate search ---- message search
+    |
+    +---- SharePoint (GET) ---- attachment download
+    |
     v
 AuthManager ---- OAuth device code ---- Microsoft sign-in
     |
@@ -31,6 +35,20 @@ AuthManager ---- OAuth device code ---- Microsoft sign-in
 ```
 
 Graph APIはスコープ要求にも通信先にも含めない。Playwright、Selenium、ブラウザーのCookie抽出も行わない。
+
+### 追加したresource token（2026-11）
+
+既存のrefresh tokenから、resourceごとのBearerを取得する。
+
+| resource | 用途 | 境界 |
+|---|---|---|
+| `chatsvcagg.teams.microsoft.com` | CSA snapshot | 既存 |
+| `substrate.office.com` | `search_messages` | 送信先は`substrate.office.com`に固定 |
+| `https://{host}.sharepoint.com` | `download_attachment` | ホストごとにcache。GETだけを送り、事前認可URLへのredirectにはtokenを付けない |
+
+SharePoint用tokenには、本人の権限の範囲で書き込みもできるscopeが付く。読み取り専用の用途に限定するため、`downloads.py`はGET以外の要求を持たない構造にする。この境界を広げる変更は、書き込みモデル（下記）と同じ三重ガードの設計なしに行わない。
+
+request URLはログに出さない。署名付き文字起こしURLと事前認可されたダウンロードURLは、クエリに認証情報を含むためである。
 
 ## 認証境界
 
@@ -67,7 +85,7 @@ channelの通常message既読はCSA `isMessageRead`、重要message既読は`isI
 
 AIリキャップ、AIノート、タスクはVTT文字起こしと同一ではない。Microsoftの説明ではAIノート等はExchange mailbox側、録画はOneDrive/SharePoint側にも関係する。
 
-公開Web bundleとMITライセンスの現行参考実装からSubstrate `WorkingSetFiles`経路を特定し、対象テナントで実地検証した。substrate audienceのトークン発行には成功したが、APIは`403 ErrorAccessDenied`を返した。Meeting Catchup／Meeting Artifacts／MCPSの設定値も観測したものの、安定した要求・応答契約は確定できていない。このため、通常のMCPツールはSubstrateを呼ばず、AIリキャップは`not_implemented`とし、文字起こしを「AIリキャップ」と偽装しない。
+公開Web bundleとMITライセンスの現行参考実装からSubstrate `WorkingSetFiles`経路を特定し、対象テナントで実地検証した。2026-08-04はsubstrate audienceのトークン発行には成功したが、APIは`403 ErrorAccessDenied`を返した。2026-11-25の再調査では権限エラーではなくURL形式の`400`に変わったが、正しい要求形式は確定していない。Meeting Catchup／Meeting Artifacts／MCPSの設定値も観測したものの、安定した要求・応答契約は確定できていない。このため、通常のMCPツールはSubstrateを呼ばず、AIリキャップは`not_implemented`とし、文字起こしを「AIリキャップ」と偽装しない。
 
 ## 書き込みモデル
 
