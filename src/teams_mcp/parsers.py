@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 from typing import Any, ClassVar
 from urllib.parse import unquote
 
-from .file_markup import generic_file_labels
+from .file_markup import generic_file_labels, shared_file_labels
 from .models import Chat, ChatKind, Message, TranscriptEntry
 
 
@@ -162,11 +162,11 @@ def parse_message(raw: dict[str, Any], conversation_id: str) -> Message:
     message_type = _string(raw, "messagetype", "messageType", "type") or ""
     deleted = message_type == "MessageDelete" or bool(props.get("deletetime"))
     content = "" if deleted else html_to_text(_string(raw, "content"))
-    attachments = (
-        generic_file_labels(_string(raw, "content") or "")
-        if not deleted and message_type == "RichText/Media_GenericFile"
-        else []
-    )
+    attachments: list[dict[str, str | None]] = []
+    if not deleted:
+        if message_type == "RichText/Media_GenericFile":
+            attachments.extend(generic_file_labels(_string(raw, "content") or ""))
+        attachments.extend(shared_file_labels(props.get("files")))
     return Message(
         id=message_id,
         conversation_id=conversation_id,

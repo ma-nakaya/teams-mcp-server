@@ -23,6 +23,10 @@ Use these bare tool names. A client may display its own server namespace separat
 
 `unread_only` returns only items explicitly reported as unread by the Teams snapshot. It excludes `unknown`. Content reads do not change read state.
 
+### Message attachments
+
+Each returned message has an `attachments` list. Ordinary Teams attachments come from the message's `properties.files` and have `name`, `type: "file"`, `file_type` (extension or null), `storage` (`sharepoint`, `onedrive`, or null), and `url`. `url` is the SharePoint/OneDrive location with query and fragment removed; it is null unless the host is `*.sharepoint.com` over HTTPS. Legacy AMS file messages report only `name` and `type`. Channel files can be read through a SharePoint reader that covers the team site; listing an attachment does not download it.
+
 ## State-change tools
 
 | Tool | Parameters and bounds | Required guards |
