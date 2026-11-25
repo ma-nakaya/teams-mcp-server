@@ -49,7 +49,7 @@ def generic_file_labels(content: str) -> list[dict[str, str | None]]:
     return parser.labels
 
 
-def _sharepoint_url(value: object) -> tuple[str, str] | None:
+def sharepoint_location(value: object) -> tuple[str, str] | None:
     """Return a credential-free SharePoint URL and its storage kind, or None."""
     if not isinstance(value, str) or len(value) > 2048:
         return None
@@ -93,7 +93,7 @@ def shared_file_labels(raw_files: object) -> list[dict[str, str | None]]:
         name = _safe_name(item.get("fileName")) or _safe_name(item.get("title"))
         if not name:
             continue
-        location = _sharepoint_url(item.get("objectUrl"))
+        location = sharepoint_location(item.get("objectUrl"))
         file_type = item.get("fileType")
         labels.append(
             {
