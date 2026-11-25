@@ -203,7 +203,7 @@ class TeamsFileApi:
             headers["Content-Type"] = "application/octet-stream"
         mutation = method != "GET"
         try:
-            async with self.api._client().stream(
+            async with self.api.client().stream(
                 method,
                 url,
                 headers=headers,

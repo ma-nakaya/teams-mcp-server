@@ -174,7 +174,7 @@ class SharePointDownloader:
         redirects = 0
         while True:
             try:
-                async with self.api._client().stream(
+                async with self.api.client().stream(
                     "GET", url, headers=headers, follow_redirects=False
                 ) as response:
                     if response.status_code == 401 and headers and not retried_auth:

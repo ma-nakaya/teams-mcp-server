@@ -18,7 +18,7 @@ from .auth_types import (
     _aad_error,
     _jwt_claims,
 )
-from .config import Settings
+from .config import Settings, new_http_client
 from .credentials import CredentialStore, KeyringCredentialStore
 from .errors import AuthenticationError
 from .models import CredentialBundle
@@ -74,11 +74,7 @@ class AuthManager:
         if self._http is not None:
             return self._http
         if self._owned_http is None:
-            self._owned_http = httpx.AsyncClient(
-                timeout=self.settings.request_timeout_seconds,
-                follow_redirects=False,
-                headers={"User-Agent": "teams-playwright-mcp-server/0.2"},
-            )
+            self._owned_http = new_http_client(self.settings)
         return self._owned_http
 
     @staticmethod

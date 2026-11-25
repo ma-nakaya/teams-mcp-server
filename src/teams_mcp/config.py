@@ -5,9 +5,24 @@ import os
 import sys
 from dataclasses import dataclass, field
 
+import httpx
 from platformdirs import user_cache_path, user_downloads_path
 
 DEFAULT_WORK_CLIENT_ID = "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+USER_AGENT = "teams-playwright-mcp-server/0.2"
+
+
+def new_http_client(settings: Settings) -> httpx.AsyncClient:
+    """Create the HTTP client every Teams endpoint uses.
+
+    Redirects are never followed automatically: each caller decides whether a
+    redirect target may receive its credentials.
+    """
+    return httpx.AsyncClient(
+        timeout=settings.request_timeout_seconds,
+        follow_redirects=False,
+        headers={"User-Agent": USER_AGENT},
+    )
 
 
 def configure_logging(level: str = "INFO") -> None:

@@ -13,7 +13,7 @@ from uuid import uuid4
 import httpx
 
 from .auth import AuthManager
-from .config import Settings
+from .config import Settings, new_http_client
 from .errors import ApiError
 from .models import CredentialBundle
 
@@ -67,15 +67,12 @@ class TeamsApi:
             await self._owned_http.aclose()
             self._owned_http = None
 
-    def _client(self) -> httpx.AsyncClient:
+    def client(self) -> httpx.AsyncClient:
+        """Return the shared HTTP client (injected, or created on first use)."""
         if self._http is not None:
             return self._http
         if self._owned_http is None:
-            self._owned_http = httpx.AsyncClient(
-                timeout=self.settings.request_timeout_seconds,
-                follow_redirects=False,
-                headers={"User-Agent": "teams-playwright-mcp-server/0.2"},
-            )
+            self._owned_http = new_http_client(self.settings)
         return self._owned_http
 
     @staticmethod
@@ -160,7 +157,7 @@ class TeamsApi:
 
         for attempt in range(4):
             try:
-                response = await self._client().request(
+                response = await self.client().request(
                     method,
                     url,
                     headers=headers,
