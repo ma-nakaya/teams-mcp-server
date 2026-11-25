@@ -8,8 +8,9 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from teams_mcp.auth import CSA_AUDIENCE, SUBSTRATE_AUDIENCE, AuthManager
+from teams_mcp.auth import CSA_AUDIENCE, SHAREPOINT_AUDIENCE, SUBSTRATE_AUDIENCE, AuthManager
 from teams_mcp.config import Settings
+from teams_mcp.errors import AuthenticationError
 from teams_mcp.models import CredentialBundle
 
 
@@ -214,3 +215,47 @@ async def test_substrate_token_uses_expected_scope_and_audience() -> None:
     async with client(handler) as http:
         auth = AuthManager(Settings(credential_profile="pytest-substrate"), MemoryStore(old), http)
         assert await auth.get_substrate_token() == token
+
+
+@pytest.mark.asyncio
+async def test_sharepoint_tokens_are_requested_and_cached_per_host() -> None:
+    old = CredentialBundle(
+        refresh_token="refresh",
+        client_id="client",
+        tenant_id="tenant",
+        skype_token="skype",
+        skype_expires_at=time.time() + 3_600,
+        region="apac",
+    )
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        scope = dict(httpx.QueryParams(request.content.decode()))["scope"]
+        requested.append(scope)
+        token = unsigned_jwt(
+            {"aud": SHAREPOINT_AUDIENCE, "exp": int(time.time()) + 3_600, "scope": scope}
+        )
+        return httpx.Response(200, json={"access_token": token})
+
+    async with client(handler) as http:
+        auth = AuthManager(Settings(credential_profile="pytest-sp"), MemoryStore(old), http)
+        team = await auth.get_sharepoint_token("Contoso.sharepoint.com")
+        personal = await auth.get_sharepoint_token("contoso-my.sharepoint.com")
+        assert team != personal
+        assert await auth.get_sharepoint_token("contoso.sharepoint.com") == team
+    assert requested == [
+        "https://contoso.sharepoint.com/.default offline_access",
+        "https://contoso-my.sharepoint.com/.default offline_access",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sharepoint_token_is_never_requested_for_other_hosts() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"unexpected token request: {request.url}")
+
+    async with client(handler) as http:
+        auth = AuthManager(Settings(credential_profile="pytest-sp"), MemoryStore(), http)
+        for host in ("evil.example", "sharepoint.com", "contoso.sharepoint.com.evil.example"):
+            with pytest.raises(AuthenticationError, match="non-SharePoint"):
+                await auth.get_sharepoint_token(host)

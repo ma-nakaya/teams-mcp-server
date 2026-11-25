@@ -1,11 +1,29 @@
 from __future__ import annotations
 
+import logging
 import os
+import sys
 from dataclasses import dataclass, field
 
-from platformdirs import user_cache_path
+from platformdirs import user_cache_path, user_downloads_path
 
 DEFAULT_WORK_CLIENT_ID = "1fec8e78-bce4-4aaf-ab1b-5451cc387264"
+
+
+def configure_logging(level: str = "INFO") -> None:
+    """Log to stderr, never logging request URLs.
+
+    httpx logs every request URL at INFO. Signed transcript and pre-authorized
+    SharePoint download URLs carry credentials in the query, so the HTTP client
+    loggers are held at WARNING regardless of the requested level.
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -64,6 +82,14 @@ class Settings:
     max_response_bytes: int = field(
         default_factory=lambda: _int_env("TEAMS_MAX_RESPONSE_BYTES", 10_000_000)
     )
+    download_dir: str = field(
+        default_factory=lambda: (
+            os.getenv("TEAMS_DOWNLOAD_DIR", "").strip() or str(user_downloads_path() / "teams-mcp")
+        )
+    )
+    max_download_bytes: int = field(
+        default_factory=lambda: _int_env("TEAMS_MAX_DOWNLOAD_BYTES", 100 * 1024 * 1024)
+    )
     log_level: str = field(
         default_factory=lambda: os.getenv("TEAMS_LOG_LEVEL", "INFO").strip().upper()
     )
@@ -80,3 +106,5 @@ class Settings:
             raise ValueError("TEAMS_REQUEST_TIMEOUT_SECONDS must be positive")
         if self.max_response_bytes < 1024:
             raise ValueError("TEAMS_MAX_RESPONSE_BYTES must be at least 1024")
+        if self.max_download_bytes < 1024:
+            raise ValueError("TEAMS_MAX_DOWNLOAD_BYTES must be at least 1024")

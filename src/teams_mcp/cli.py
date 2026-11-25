@@ -3,14 +3,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import logging
-import sys
 from typing import Any
 
 from .api import TeamsApi
 from .auth import AuthManager
 from .auth_types import DeviceCodePrompt, PendingDeviceLogin
-from .config import Settings
+from .config import Settings, configure_logging
 from .credentials import KeyringPendingLoginStore
 from .errors import TeamsMcpError
 from .service import TeamsService
@@ -156,7 +154,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    configure_logging("INFO")
     try:
         raise SystemExit(asyncio.run(_run(_parser().parse_args())))
     except (TeamsMcpError, ValueError) as exc:

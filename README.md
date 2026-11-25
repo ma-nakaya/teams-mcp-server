@@ -78,6 +78,15 @@ uv run teams-mcp login-complete
 | `read_meeting_transcript` | 会議録画メッセージから AMS VTT 文字起こしを取得 |
 | `collect_meeting_recaps` | 最近の会議文字起こしを収集（互換名） |
 | `collect_meeting_artifacts` | 上記の意味を明確にした別名 |
+| `download_attachment` | 添付の `url`（SharePoint／OneDrive）をローカルへ保存。Teams 側は変更しない |
+
+読み取り系ツールが返す各メッセージの `attachments` には、ファイル名、拡張子、保存先の種類（`sharepoint`／`onedrive`）、クエリを除いた `url` が入ります。`download_attachment` はこの `url` を受け取り、`TEAMS_DOWNLOAD_DIR` に保存して、パス、サイズ、SHA-256 を返します。
+
+- 送るのは GET だけで、接続先は `url` の `*.sharepoint.com` ホストに限ります。同じホスト内のリダイレクトにだけ従い、リダイレクト先にはトークンを付けません。
+- 既存のファイルは上書きせず、`名前 (1).拡張子` のように別名で保存します。
+- Windows では、ブラウザーで落としたときと同じく、インターネット由来の印（`Zone.Identifier`、MOTW）を付けます。Office のマクロのブロックなどの保護はこの印に基づくため、印を付けられない保存先（FAT32 など）では保存せずに `download_motw_failed` で止まります。
+- 会議録画など、ダウンロードが禁止されたファイルは `download_forbidden` で止まります。禁止を回避する処理はしません。
+- 認証は既存のサインインから SharePoint 用トークンを取得します。このトークンには本人の権限の範囲で書き込みもできるスコープが付くため、実装は GET 以外を送らない構造にしています。
 
 AI リキャップと文字起こしは別物として扱います。現在検証できているのは VTT 文字起こしです。AI ノート／タスクの内部取得先は安定性を確認できていないため、`ai_recap.status=not_implemented` を明示して返します。
 
@@ -132,6 +141,8 @@ uv run teams-mcp-server
 | `TEAMS_AGENT_MARKER` | `[MCP]` | 送信メッセージへ付けるマーカー |
 | `TEAMS_REQUEST_TIMEOUT_SECONDS` | `30` | リクエストのタイムアウト（秒、正の値） |
 | `TEAMS_MAX_RESPONSE_BYTES` | `10000000` | 応答サイズ上限（1024 以上） |
+| `TEAMS_DOWNLOAD_DIR` | `ダウンロード\teams-mcp` | `download_attachment` の保存先 |
+| `TEAMS_MAX_DOWNLOAD_BYTES` | `104857600` | `download_attachment` のサイズ上限（1024 以上） |
 | `TEAMS_LOG_LEVEL` | `INFO` | ログレベル |
 
 ## 自分宛て PDF 添付（実験的）

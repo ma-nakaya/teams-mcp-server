@@ -30,6 +30,9 @@ CSA_SCOPE = "https://chatsvcagg.teams.microsoft.com/.default offline_access"
 CSA_AUDIENCE = "https://chatsvcagg.teams.microsoft.com"
 SUBSTRATE_SCOPE = "https://substrate.office.com/.default offline_access"
 SUBSTRATE_AUDIENCE = "https://substrate.office.com"
+# SharePoint Online's resource app ID; every *.sharepoint.com host issues this audience.
+SHAREPOINT_AUDIENCE = "00000003-0000-0ff1-ce00-000000000000"
+SHAREPOINT_HOST_SUFFIX = ".sharepoint.com"
 AUTHZ_URL = "https://teams.microsoft.com/api/authsvc/v1.0/authz"
 TENANTS_URL = "https://teams.microsoft.com/api/mt/emea/beta/users/tenants"
 PLACEHOLDER_TENANTS = {
@@ -272,14 +275,33 @@ class AuthManager:
             force=force,
         )
 
+    async def get_sharepoint_token(self, host: str, *, force: bool = False) -> str:
+        """Return a delegated token for one SharePoint/OneDrive host.
+
+        Tokens for different hosts share one audience, so they are cached per host.
+        """
+        host = host.lower()
+        if not host.endswith(SHAREPOINT_HOST_SUFFIX) or host == SHAREPOINT_HOST_SUFFIX[1:]:
+            raise AuthenticationError(
+                "Refusing to request a token for a non-SharePoint host.", "host_rejected"
+            )
+        return await self._get_resource_token(
+            scope=f"https://{host}/.default offline_access",
+            audience=SHAREPOINT_AUDIENCE,
+            force=force,
+            cache_key=host,
+        )
+
     async def _get_resource_token(
         self,
         *,
         scope: str,
         audience: str,
         force: bool,
+        cache_key: str | None = None,
     ) -> str:
-        cached = self._resource_tokens.get(audience)
+        key = cache_key or audience
+        cached = self._resource_tokens.get(key)
         if (
             not force
             and cached is not None
@@ -287,7 +309,7 @@ class AuthManager:
         ):
             return cached.token
         async with self._process_lock:
-            cached = self._resource_tokens.get(audience)
+            cached = self._resource_tokens.get(key)
             if (
                 not force
                 and cached is not None
@@ -319,7 +341,7 @@ class AuthManager:
                     claims.get("exp")
                     or time.time() + int(token_response.get("expires_in") or 3_600)
                 )
-                self._resource_tokens[audience] = CachedBearerToken(access_token, expires_at)
+                self._resource_tokens[key] = CachedBearerToken(access_token, expires_at)
                 return access_token
 
     async def _mint_skype_token(self, access_token: str) -> MintedSkypeToken:

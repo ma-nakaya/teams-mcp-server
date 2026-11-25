@@ -41,6 +41,15 @@ async def test_expected_mcp_tools_are_registered() -> None:
 
 
 @pytest.mark.asyncio
+async def test_download_tool_is_registered_as_non_destructive() -> None:
+    tool = next(tool for tool in await mcp.list_tools() if tool.name == "download_attachment")
+    assert tool.annotations is not None
+    assert tool.annotations.destructiveHint is False
+    assert tool.annotations.readOnlyHint is False
+    assert set(tool.inputSchema["required"]) == {"url"}
+
+
+@pytest.mark.asyncio
 async def test_self_attachment_tool_requires_a_request_id_and_confirmation() -> None:
     tool = next(tool for tool in await mcp.list_tools() if tool.name == "send_chat_file")
     assert tool.annotations is not None

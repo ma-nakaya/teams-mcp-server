@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-import sys
 from typing import Annotated, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -9,7 +7,7 @@ from mcp.types import CallToolResult, ToolAnnotations
 
 from .api import TeamsApi
 from .auth import AuthManager
-from .config import Settings
+from .config import Settings, configure_logging
 from .files import file_tool_result
 from .service import TeamsService
 
@@ -22,6 +20,13 @@ READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
     destructiveHint=False,
     idempotentHint=True,
+    openWorldHint=True,
+)
+# Reads remote content but creates a local file, so it is not marked read-only.
+DOWNLOAD = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=False,
+    idempotentHint=False,
     openWorldHint=True,
 )
 WRITE = ToolAnnotations(
@@ -185,6 +190,16 @@ async def collect_meeting_artifacts(
     )
 
 
+@mcp.tool(annotations=DOWNLOAD)
+async def download_attachment(url: str) -> Annotated[CallToolResult, dict[str, object]]:
+    """Teams の添付 (SharePoint/OneDrive の url) をローカルへ保存します。
+
+    read_chat などが返す attachments[].url を渡します。GET だけを行い、Teams 側は
+    変更しません。保存先は TEAMS_DOWNLOAD_DIR で、既存ファイルは上書きしません。
+    """
+    return await file_tool_result(service.download_attachment(url))
+
+
 @mcp.tool(annotations=WRITE)
 async def mark_chat_read(
     chat_id: str,
@@ -276,11 +291,7 @@ async def reply_channel_thread(
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level, logging.INFO),
-        stream=sys.stderr,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(settings.log_level)
     settings.validate()
     mcp.run(transport="stdio")
 
